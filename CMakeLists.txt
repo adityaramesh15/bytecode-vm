@@ -1,9 +1,17 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.24)
 project(bytecode-vm LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(FetchContent)
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG        v3.4.0 
+)
+FetchContent_MakeAvailable(Catch2)
 
 add_library(vm_compiler_settings INTERFACE)
 target_include_directories(vm_compiler_settings INTERFACE include)
@@ -33,11 +41,13 @@ else()
     target_link_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined)
 endif()
 
-
-
-
-add_executable(vm_tests 
-    src/main.cpp
-    tests/test_day1.cpp
+file(GLOB_RECURSE TEST_SOURCES 
+    CONFIGURE_DEPENDS 
+    "tests/test_*.cpp"
 )
-target_link_libraries(vm_tests PRIVATE vm_compiler_settings)
+add_executable(vm_tests ${TEST_SOURCES})
+target_link_libraries(vm_tests 
+    PRIVATE 
+        vm_compiler_settings
+        Catch2::Catch2WithMain
+)
