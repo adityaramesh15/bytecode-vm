@@ -4,6 +4,7 @@
 #include <charconv> 
 #include <optional>
 #include <expected> 
+#include <variant>
 #include "Lexer.hpp"
 #include "AST.hpp"
 
@@ -106,17 +107,20 @@ class Parser {
                 auto reg_res = extract_register(current);
                 if (!reg_res) return std::unexpected(reg_res.error());
                 advance();
-                return Operand{.value = *reg_res};
+                std::variant<VirtualRegister, int64_t, std::string_view> value{std::in_place_type<VirtualRegister>, *reg_res};
+                return Operand{value};
             }
             if (current.token == TokenType::Immediate) {
                 auto imm_res = extract_immediate(current);
                 if (!imm_res) return std::unexpected(imm_res.error());
                 advance();
-                return Operand{.value = *imm_res};
+                std::variant<VirtualRegister, int64_t, std::string_view> value{std::in_place_type<int64_t>, *imm_res};
+                return Operand{value};
             }
             if (current.token == TokenType::Identifier) {
                 advance();
-                return Operand{.value = current.lexeme};
+                std::variant<VirtualRegister, int64_t, std::string_view> value{std::in_place_type<std::string_view>, current.lexeme};
+                return Operand{value};
             }
             return std::unexpected(SyntaxError{
                 .message = "Expected a valid operand (Register, Immediate literal, or Jump target identifier)",
@@ -140,7 +144,8 @@ class Parser {
         auto src_op = parse_operand();
         if (!src_op) return std::unexpected(src_op.error());
 
-        return AST::MovOp{.dest = *dest_reg, .src = *src_op};
+        AST::ASTNode node{std::in_place_type<AST::MovOp>, AST::MovOp{.dest = *dest_reg, .src = *src_op}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_add_op() noexcept {
@@ -157,7 +162,8 @@ class Parser {
         auto src_op = parse_operand();
         if (!src_op) return std::unexpected(src_op.error());
 
-        return AST::AddOp{.dest = *dest_reg, .src = *src_op};
+        AST::ASTNode node{std::in_place_type<AST::AddOp>, AST::AddOp{.dest = *dest_reg, .src = *src_op}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_sub_op() noexcept {
@@ -174,19 +180,22 @@ class Parser {
         auto src_op = parse_operand();
         if (!src_op) return std::unexpected(src_op.error());
 
-        return AST::SubOp{.dest = *dest_reg, .src = *src_op};
+        AST::ASTNode node{std::in_place_type<AST::SubOp>, AST::SubOp{.dest = *dest_reg, .src = *src_op}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_jmp_op() noexcept {
         auto target_tok = consume(TokenType::Identifier, "JMP instruction requires an identifier label target name");
         if (!target_tok) return std::unexpected(target_tok.error());
-        return AST::JmpOp{.target = target_tok->lexeme};
+        AST::ASTNode node{std::in_place_type<AST::JmpOp>, AST::JmpOp{.target = target_tok->lexeme}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_push_op() noexcept {
         auto src_op = parse_operand();
         if (!src_op) return std::unexpected(src_op.error());
-        return AST::PushOp{.src = *src_op};
+        AST::ASTNode node{std::in_place_type<AST::PushOp>, AST::PushOp{.src = *src_op}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_pop_op() noexcept {
@@ -196,13 +205,15 @@ class Parser {
         auto dest_reg = extract_register(*dest_tok);
         if (!dest_reg) return std::unexpected(dest_reg.error());
 
-        return AST::PopOp{.dest = *dest_reg};
+        AST::ASTNode node{std::in_place_type<AST::PopOp>, AST::PopOp{.dest = *dest_reg}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_call_op() noexcept {
         auto target_tok = consume(TokenType::Identifier, "CALL instruction requires an identifier function label name");
         if (!target_tok) return std::unexpected(target_tok.error());
-        return AST::CallOp{.target = target_tok->lexeme};
+        AST::ASTNode node{std::in_place_type<AST::CallOp>, AST::CallOp{.target = target_tok->lexeme}};
+        return node;
     }
 
     ParseResult<AST::ASTNode> parse_next_instruction() noexcept {
@@ -214,7 +225,8 @@ class Parser {
             if (!label_name.empty() && label_name.back() == ':') {
                 label_name.remove_suffix(1);
             }
-            return AST::LabelDecl{.name = label_name};
+            AST::ASTNode node{std::in_place_type<AST::LabelDecl>, AST::LabelDecl{.name = label_name}};
+            return node;
         }
 
         if (current.token == TokenType::Opcode) {
@@ -228,7 +240,10 @@ class Parser {
             if (opcode_lexeme == "PUSH") return parse_push_op();
             if (opcode_lexeme == "POP")  return parse_pop_op();
             if (opcode_lexeme == "CALL") return parse_call_op();
-            if (opcode_lexeme == "RET")  return AST::RetOp{};
+            if (opcode_lexeme == "RET") {
+                AST::ASTNode node{std::in_place_type<AST::RetOp>, AST::RetOp{}};
+                return node;
+            }
         }
 
         return std::unexpected(SyntaxError{

@@ -39,6 +39,11 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 else()
     target_compile_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined)
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(vm_compiler_settings INTERFACE -stdlib=libc++)
+        target_link_options(vm_compiler_settings INTERFACE -stdlib=libc++ -lc++abi)
+    endif()
 endif()
 
 file(GLOB_RECURSE TEST_SOURCES 

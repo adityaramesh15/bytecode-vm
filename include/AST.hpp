@@ -2,7 +2,7 @@
 #include "Instruction.hpp"
 #include <string_view>
 #include <expected>
-#include "Instruction.hpp"
+#include <variant>
 
 namespace AST {
     struct MovOp {
