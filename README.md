@@ -1,2 +1,2 @@
 # bytecode-vm
-A high-performance, register-based Bytecode VM featuring a custom memory subsystem, an optimizing compiler frontend, and an isolated execution runtime. (WIP)
+Building a register-based Bytecode VM w/ custom memory subsystem, optimized compiler frontend, and an isolated execution runtime. 
