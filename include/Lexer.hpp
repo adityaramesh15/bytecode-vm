@@ -1,4 +1,3 @@
-#include "StringView.hpp"
 #include <string_view>
 #include <vector> 
 #include <cctype>
@@ -54,7 +53,7 @@ class Lexer {
         }
 
         constexpr void advance (size_t n = 1) noexcept {
-            n = std::min(n, m_str_view.size()); 
+            n = std::min(n, m_str_view.size());     
             m_str_view.remove_prefix(n);
             m_column += n;
         }
@@ -71,7 +70,13 @@ class Lexer {
                     m_column = 1;
                 } else if (c == ';') {
                     while (!m_str_view.empty() && peek() != '\n') {
-                        m_str_view.remove_prefix(1);        // no need to use advance() since column will be set to 1 either way 
+                        advance(1);
+                    }
+
+                    if (!m_str_view.empty() && peek() == '\n') {
+                        m_str_view.remove_prefix(1); 
+                        m_line++;
+                        m_column = 1;
                     }
                 } else {
                     break;
