@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-stdlib=libc++)
+    add_link_options(-stdlib=libc++ -lc++abi)
+endif()
+
 include(FetchContent)
 FetchContent_Declare(
     Catch2
@@ -32,18 +37,12 @@ target_compile_options(vm_compiler_settings INTERFACE
     >
 )
 
-
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(vm_compiler_settings INTERFACE /fsanitize=address)
     target_link_options(vm_compiler_settings INTERFACE /fsanitize=address)
 else()
     target_compile_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined)
-
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        target_compile_options(vm_compiler_settings INTERFACE -stdlib=libc++)
-        target_link_options(vm_compiler_settings INTERFACE -stdlib=libc++ -lc++abi)
-    endif()
 endif()
 
 file(GLOB_RECURSE TEST_SOURCES 
