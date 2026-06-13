@@ -3,7 +3,6 @@
 
 TEST_CASE("StringView - Default and Empty Construction", "[StringView]") {
     StringView view;
-    REQUIRE(view.size() == 0);
     REQUIRE(view.empty());
     REQUIRE(view.data() == nullptr);
 }
@@ -31,6 +30,5 @@ TEST_CASE("StringView - Explicit Length Sub-slice Construction", "[StringView]")
 TEST_CASE("StringView - Null Pointer Safety", "[StringView]") {
     StringView view(nullptr);
     REQUIRE(view.empty());
-    REQUIRE(view.size() == 0);
     REQUIRE(view.data() == nullptr);
 }

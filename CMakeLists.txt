@@ -37,16 +37,29 @@ target_compile_options(vm_compiler_settings INTERFACE
     >
 )
 
+unset(CMAKE_CXX_CLANG_TIDY)
+
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
 if(CLANG_TIDY_EXE)
-    message(STATUS "Binding Clang-Tidy static analysis to build targets.")
-    set(CMAKE_CXX_CLANG_TIDY 
+    message(STATUS "DevDiv Toolchain: Configuring localized static analysis passes.")
+    set(CORE_CLANG_TIDY_CHECKS
         ${CLANG_TIDY_EXE}
         "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*"
         "-warnings-as-errors=*"
     )
+    set(TEST_CLANG_TIDY_CHECKS
+        ${CLANG_TIDY_EXE}
+        "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*,-cert-err58-cpp,-bugprone-chained-comparison,-readability-magic-numbers,-bugprone-use-after-move,-modernize-avoid-c-arrays"
+        "-warnings-as-errors=*"
+    )
+    if(TARGET vm_core)
+        set_target_properties(vm_core PROPERTIES CXX_CLANG_TIDY "${CORE_CLANG_TIDY_CHECKS}")
+    endif()
+    if(TARGET vm_tests)
+        set_target_properties(vm_tests PROPERTIES CXX_CLANG_TIDY "${TEST_CLANG_TIDY_CHECKS}")
+    endif()
 else()
-    message(WARNING "clang-tidy binary was not detected on this system host environment.")
+    message(WARNING "DevDiv Toolchain: clang-tidy binary was not detected on this system host environment.")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")

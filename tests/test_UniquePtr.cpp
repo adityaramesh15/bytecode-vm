@@ -135,7 +135,7 @@ struct StatefulMoveOnlyDeleter {
     }
 
     void operator()(LifetimeTracker* ptr) const noexcept {
-        if (trace_counter) {
+        if (trace_counter != nullptr) {
             (*trace_counter)++;
         }
         delete ptr;
