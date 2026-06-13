@@ -37,6 +37,18 @@ target_compile_options(vm_compiler_settings INTERFACE
     >
 )
 
+find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+if(CLANG_TIDY_EXE)
+    message(STATUS "Binding Clang-Tidy static analysis to build targets.")
+    set(CMAKE_CXX_CLANG_TIDY 
+        ${CLANG_TIDY_EXE}
+        "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*"
+        "-warnings-as-errors=*"
+    )
+else()
+    message(WARNING "clang-tidy binary was not detected on this system host environment.")
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(vm_compiler_settings INTERFACE /fsanitize=address)
     target_link_options(vm_compiler_settings INTERFACE /fsanitize=address)

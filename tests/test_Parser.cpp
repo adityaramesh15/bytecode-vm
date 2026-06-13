@@ -92,3 +92,26 @@ TEST_CASE("Parser - Syntactic Error Bounds Handling", "[Parser]") {
         REQUIRE_FALSE(result.has_value());
     }
 }
+
+TEST_CASE("Parser - Malformed Input Edge Cases", "[Parser]") {
+    SECTION("Abrupt Instruction Truncation") {
+        // Opcode cut off completely before any operands are parsed
+        std::string_view malformed_src = "MOV";
+        auto result = parse_assembly(malformed_src);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("Dangling Separation Delimiters") {
+        // Trailing comma with zero secondary argument data
+        std::string_view malformed_src = "MOV R1, ";
+        auto result = parse_assembly(malformed_src);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("Illegal Token Infiltration") {
+        // Stray characters that must cleanly fail monadic parsing
+        std::string_view malformed_src = "ADD R1, @";
+        auto result = parse_assembly(malformed_src);
+        REQUIRE_FALSE(result.has_value());
+    }
+}

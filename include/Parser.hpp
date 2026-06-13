@@ -5,6 +5,7 @@
 #include <optional>
 #include <expected> 
 #include <variant>
+#include <cctype>
 #include "Lexer.hpp"
 #include "AST.hpp"
 
@@ -65,6 +66,17 @@ class Parser {
                     .column = current.column
                 });
             }
+
+            if (expected == TokenType::Identifier) {
+                if (current.lexeme.empty() || 
+                    !(std::isalpha(static_cast<unsigned char>(current.lexeme[0])) || current.lexeme[0] == '_')) {
+                    return std::unexpected(SyntaxError{
+                        .message = "Encountered an invalid or illegal token character layout where an identifier was expected",
+                        .line = current.line,
+                        .column = current.column
+                    });
+                }
+            }
             advance();
             return current;
         }
@@ -118,6 +130,14 @@ class Parser {
                 return Operand{value};
             }
             if (current.token == TokenType::Identifier) {
+                if (current.lexeme.empty() || 
+                    !(std::isalpha(static_cast<unsigned char>(current.lexeme[0])) || current.lexeme[0] == '_')) {
+                    return std::unexpected(SyntaxError{
+                        .message = "Expected a valid identifier name starting with an alphabetical character or underscore",
+                        .line = current.line,
+                        .column = current.column
+                    });
+                }
                 advance();
                 std::variant<VirtualRegister, int64_t, std::string_view> value{std::in_place_type<std::string_view>, current.lexeme};
                 return Operand{value};
