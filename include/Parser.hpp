@@ -149,129 +149,112 @@ class Parser {
             });
         }
 
+        template <typename OpType>
+        ParseResult<AST::ASTNode> parse_register_source_op(std::string_view instruction_name) noexcept {
+            auto dest_tok = consume(TokenType::Register, instruction_name);
+            if (!dest_tok) return std::unexpected(dest_tok.error());
 
-        ParseResult<AST::ASTNode> parse_mov_op() noexcept {
-        auto dest_tok = consume(TokenType::Register, "MOV instruction requires a destination register as its first operand");
-        if (!dest_tok) return std::unexpected(dest_tok.error());
+            auto dest_reg = extract_register(*dest_tok);
+            if (!dest_reg) return std::unexpected(dest_reg.error());
 
-        auto dest_reg = extract_register(*dest_tok);
-        if (!dest_reg) return std::unexpected(dest_reg.error());
-
-        if (!consume(TokenType::Comma, "Expected a ',' separator between destination and source operands")) {
-            return std::unexpected(SyntaxError{"Expected ',' separating register and source operand", peek().line, peek().column});
-        }
-
-        auto src_op = parse_operand();
-        if (!src_op) return std::unexpected(src_op.error());
-
-        AST::ASTNode node{std::in_place_type<AST::MovOp>, AST::MovOp{.dest = *dest_reg, .src = *src_op}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_add_op() noexcept {
-        auto dest_tok = consume(TokenType::Register, "ADD instruction requires a destination register as its first operand");
-        if (!dest_tok) return std::unexpected(dest_tok.error());
-
-        auto dest_reg = extract_register(*dest_tok);
-        if (!dest_reg) return std::unexpected(dest_reg.error());
-
-        if (!consume(TokenType::Comma, "Expected a ',' separator between destination and source operands")) {
-            return std::unexpected(SyntaxError{"Expected ',' separating register and source operand", peek().line, peek().column});
-        }
-
-        auto src_op = parse_operand();
-        if (!src_op) return std::unexpected(src_op.error());
-
-        AST::ASTNode node{std::in_place_type<AST::AddOp>, AST::AddOp{.dest = *dest_reg, .src = *src_op}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_sub_op() noexcept {
-        auto dest_tok = consume(TokenType::Register, "SUB instruction requires a destination register as its first operand");
-        if (!dest_tok) return std::unexpected(dest_tok.error());
-
-        auto dest_reg = extract_register(*dest_tok);
-        if (!dest_reg) return std::unexpected(dest_reg.error());
-
-        if (!consume(TokenType::Comma, "Expected a ',' separator between destination and source operands")) {
-            return std::unexpected(SyntaxError{"Expected ',' separating register and source operand", peek().line, peek().column});
-        }
-
-        auto src_op = parse_operand();
-        if (!src_op) return std::unexpected(src_op.error());
-
-        AST::ASTNode node{std::in_place_type<AST::SubOp>, AST::SubOp{.dest = *dest_reg, .src = *src_op}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_jmp_op() noexcept {
-        auto target_tok = consume(TokenType::Identifier, "JMP instruction requires an identifier label target name");
-        if (!target_tok) return std::unexpected(target_tok.error());
-        AST::ASTNode node{std::in_place_type<AST::JmpOp>, AST::JmpOp{.target = target_tok->lexeme}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_push_op() noexcept {
-        auto src_op = parse_operand();
-        if (!src_op) return std::unexpected(src_op.error());
-        AST::ASTNode node{std::in_place_type<AST::PushOp>, AST::PushOp{.src = *src_op}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_pop_op() noexcept {
-        auto dest_tok = consume(TokenType::Register, "POP instruction requires a destination register operand");
-        if (!dest_tok) return std::unexpected(dest_tok.error());
-
-        auto dest_reg = extract_register(*dest_tok);
-        if (!dest_reg) return std::unexpected(dest_reg.error());
-
-        AST::ASTNode node{std::in_place_type<AST::PopOp>, AST::PopOp{.dest = *dest_reg}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_call_op() noexcept {
-        auto target_tok = consume(TokenType::Identifier, "CALL instruction requires an identifier function label name");
-        if (!target_tok) return std::unexpected(target_tok.error());
-        AST::ASTNode node{std::in_place_type<AST::CallOp>, AST::CallOp{.target = target_tok->lexeme}};
-        return node;
-    }
-
-    ParseResult<AST::ASTNode> parse_next_instruction() noexcept {
-        Token current = peek();
-
-        if (current.token == TokenType::Label) {
-            advance();
-            std::string_view label_name = current.lexeme;
-            if (!label_name.empty() && label_name.back() == ':') {
-                label_name.remove_suffix(1);
+            if (!consume(TokenType::Comma, "Expected a ',' separator between destination and source operands")) {
+                return std::unexpected(SyntaxError{"Expected ',' separating register and source operand", peek().line, peek().column});
             }
-            AST::ASTNode node{std::in_place_type<AST::LabelDecl>, AST::LabelDecl{.name = label_name}};
+
+            auto src_op = parse_operand();
+            if (!src_op) return std::unexpected(src_op.error());
+
+            AST::ASTNode node{std::in_place_type<OpType>, OpType{.dest = *dest_reg, .src = *src_op}};
             return node;
         }
 
-        if (current.token == TokenType::Opcode) {
-            advance();
-            std::string_view opcode_lexeme = current.lexeme;
+        template <typename OpType>
+        ParseResult<AST::ASTNode> parse_identifier_target_op(std::string_view instruction_name) noexcept {
+            auto target_tok = consume(TokenType::Identifier, instruction_name);
+            if (!target_tok) return std::unexpected(target_tok.error());
 
-            if (opcode_lexeme == "MOV")  return parse_mov_op();
-            if (opcode_lexeme == "ADD")  return parse_add_op();
-            if (opcode_lexeme == "SUB")  return parse_sub_op();
-            if (opcode_lexeme == "JMP")  return parse_jmp_op();
-            if (opcode_lexeme == "PUSH") return parse_push_op();
-            if (opcode_lexeme == "POP")  return parse_pop_op();
-            if (opcode_lexeme == "CALL") return parse_call_op();
-            if (opcode_lexeme == "RET") {
-                AST::ASTNode node{std::in_place_type<AST::RetOp>, AST::RetOp{}};
-                return node;
-            }
+            AST::ASTNode node{std::in_place_type<OpType>, OpType{.target = target_tok->lexeme}};
+            return node;
         }
 
-        return std::unexpected(SyntaxError{
-            .message = "Invalid or unrecognized instruction syntax. Expected an instruction operation or a label declaration.",
-            .line = current.line,
-            .column = current.column
-        });
-    }
+        template <typename OpType>
+        ParseResult<AST::ASTNode> parse_register_destination_op(std::string_view instruction_name) noexcept {
+            auto dest_tok = consume(TokenType::Register, instruction_name);
+            if (!dest_tok) return std::unexpected(dest_tok.error());
+
+            auto dest_reg = extract_register(*dest_tok);
+            if (!dest_reg) return std::unexpected(dest_reg.error());
+
+            AST::ASTNode node{std::in_place_type<OpType>, OpType{.dest = *dest_reg}};
+            return node;
+        }
 
 
+        ParseResult<AST::ASTNode> parse_mov_op() noexcept {
+            return parse_register_source_op<AST::MovOp>("MOV instruction requires a destination register as its first operand");
+        }
+
+        ParseResult<AST::ASTNode> parse_add_op() noexcept {
+                return parse_register_source_op<AST::AddOp>("ADD instruction requires a destination register as its first operand");
+            }
+
+        ParseResult<AST::ASTNode> parse_sub_op() noexcept {
+                return parse_register_source_op<AST::SubOp>("SUB instruction requires a destination register as its first operand");
+            }
+
+        ParseResult<AST::ASTNode> parse_jmp_op() noexcept {
+                return parse_identifier_target_op<AST::JmpOp>("JMP instruction requires an identifier label target name");
+            }
+
+        ParseResult<AST::ASTNode> parse_push_op() noexcept {
+            auto src_op = parse_operand();
+            if (!src_op) return std::unexpected(src_op.error());
+            AST::ASTNode node{std::in_place_type<AST::PushOp>, AST::PushOp{.src = *src_op}};
+            return node;
+        }
+
+        ParseResult<AST::ASTNode> parse_pop_op() noexcept {
+                return parse_register_destination_op<AST::PopOp>("POP instruction requires a destination register operand");
+        }
+
+        ParseResult<AST::ASTNode> parse_call_op() noexcept {
+                return parse_identifier_target_op<AST::CallOp>("CALL instruction requires an identifier function label name");
+        }
+
+        ParseResult<AST::ASTNode> parse_next_instruction() noexcept {
+            Token current = peek();
+
+            if (current.token == TokenType::Label) {
+                advance();
+                std::string_view label_name = current.lexeme;
+                if (!label_name.empty() && label_name.back() == ':') {
+                    label_name.remove_suffix(1);
+                }
+                AST::ASTNode node{std::in_place_type<AST::LabelDecl>, AST::LabelDecl{.name = label_name}};
+                return node;
+            }
+
+            if (current.token == TokenType::Opcode) {
+                advance();
+                std::string_view opcode_lexeme = current.lexeme;
+
+                if (opcode_lexeme == "MOV")  return parse_mov_op();
+                if (opcode_lexeme == "ADD")  return parse_add_op();
+                if (opcode_lexeme == "SUB")  return parse_sub_op();
+                if (opcode_lexeme == "JMP")  return parse_jmp_op();
+                if (opcode_lexeme == "PUSH") return parse_push_op();
+                if (opcode_lexeme == "POP")  return parse_pop_op();
+                if (opcode_lexeme == "CALL") return parse_call_op();
+                if (opcode_lexeme == "RET") {
+                    AST::ASTNode node{std::in_place_type<AST::RetOp>, AST::RetOp{}};
+                    return node;
+                }
+            }
+
+            return std::unexpected(SyntaxError{
+                .message = "Invalid or unrecognized instruction syntax. Expected an instruction operation or a label declaration.",
+                .line = current.line,
+                .column = current.column
+            });
+        }
 }; 

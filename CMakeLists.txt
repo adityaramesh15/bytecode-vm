@@ -37,6 +37,9 @@ target_compile_options(vm_compiler_settings INTERFACE
     >
 )
 
+add_executable(bytecode_vm src/main.cpp)
+target_link_libraries(bytecode_vm PRIVATE vm_compiler_settings)
+
 unset(CMAKE_CXX_CLANG_TIDY)
 
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
@@ -52,9 +55,11 @@ if(CLANG_TIDY_EXE)
         "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*,-cert-err58-cpp,-bugprone-chained-comparison,-readability-magic-numbers,-bugprone-use-after-move,-modernize-avoid-c-arrays"
         "-warnings-as-errors=*"
     )
-    if(TARGET vm_core)
-        set_target_properties(vm_core PROPERTIES CXX_CLANG_TIDY "${CORE_CLANG_TIDY_CHECKS}")
+    
+    if(TARGET bytecode_vm)
+        set_target_properties(bytecode_vm PROPERTIES CXX_CLANG_TIDY "${CORE_CLANG_TIDY_CHECKS}")
     endif()
+    
     if(TARGET vm_tests)
         set_target_properties(vm_tests PROPERTIES CXX_CLANG_TIDY "${TEST_CLANG_TIDY_CHECKS}")
     endif()
