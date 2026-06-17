@@ -2,7 +2,7 @@
 #include "Lexer.hpp"
 
 TEST_CASE("Lexer - Empty Input and EOF Boundary", "[Lexer]") {
-    std::string_view source = "";
+    std::string_view source{};
     Lexer lexer(source);
     auto tokens = lexer.lex_input();
 

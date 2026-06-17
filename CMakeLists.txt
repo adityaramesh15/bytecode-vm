@@ -101,9 +101,11 @@ if(CLANG_TIDY_EXE)
         "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*"
         "-warnings-as-errors=*"
     )
+    
+    # ADDED EXCLUSIONS: Suppress macro complexity and trailing returns for Catch2 compatibility
     set(TEST_CLANG_TIDY_CHECKS
         ${CLANG_TIDY_EXE}
-        "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*,-cert-err58-cpp,-bugprone-chained-comparison,-readability-magic-numbers,-bugprone-use-after-move,-modernize-avoid-c-arrays"
+        "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*,-cert-err58-cpp,-bugprone-chained-comparison,-readability-magic-numbers,-bugprone-use-after-move,-modernize-avoid-c-arrays,-readability-function-cognitive-complexity,-modernize-use-trailing-return-type"
         "-warnings-as-errors=*"
     )
     

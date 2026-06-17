@@ -2,7 +2,9 @@
 #include "Parser.hpp"
 
 // Utility helper to chain Lexer and Parser sequences seamlessly
-static ParseResult<std::vector<AST::ASTNode>> parse_assembly(std::string_view source) noexcept {
+static auto parse_assembly(std::string_view source) noexcept 
+    -> ParseResult<std::vector<AST::ASTNode>> 
+{
     Lexer lexer(source);
     auto tokens = lexer.lex_input();
     Parser parser(std::move(tokens));
