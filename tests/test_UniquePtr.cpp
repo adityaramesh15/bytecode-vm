@@ -112,7 +112,7 @@ struct StatefulMoveOnlyDeleter {
     int context_id;
     int* trace_counter;
 
-    StatefulMoveOnlyDeleter(int id, int* counter) : context_id(id), trace_counter(counter) {}
+    StatefulMoveOnlyDeleter(int id_val, int* counter) : context_id(id_val), trace_counter(counter) {}
 
     // Enforce move-only constraints
     StatefulMoveOnlyDeleter(const StatefulMoveOnlyDeleter&) = delete;

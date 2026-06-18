@@ -72,6 +72,12 @@ target_compile_options(matrix_benchmark PRIVATE
         -Wall -Wextra -Werror -O3
     >
 )
+add_executable(false_sharing_benchmark benchmarks/false_sharing_benchmark.cpp)
+target_compile_options(false_sharing_benchmark PRIVATE 
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
+        -Wall -Wextra -Werror -O3
+    >
+)
 
 # ==========================================
 # 5. Automated Testing Target
