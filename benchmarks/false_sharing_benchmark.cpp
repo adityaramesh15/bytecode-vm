@@ -5,6 +5,12 @@
 #include <thread>
 #include <functional>
 
+#ifdef __cpp_lib_hardware_interference_size
+    using std::hardware_destructive_interference_size;
+#else
+    constexpr size_t hardware_destructive_interference_size = 64;
+#endif
+
 constexpr uint64_t ITERATIONS = 100000000; 
 constexpr size_t NUM_THREADS = 4;
 

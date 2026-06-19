@@ -10,7 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Enforce Clang-specific standard library overrides early
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_compile_options(-stdlib=libc++)
+    add_compile_options(-stdlib=libc++ -fexperimental-library)
     add_link_options(-stdlib=libc++ -lc++abi)
 endif()
 
