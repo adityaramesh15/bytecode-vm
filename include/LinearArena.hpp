@@ -41,7 +41,7 @@ namespace MemoryEngine {
 
             // for when i want to allocate but not instantiate (think resizing vector space but not emplacing objects just yet)
             template <typename T>
-            [[nodiscard]] void* allocate_raw(size_t count = 1) {
+            [[nodiscard]] void* allocate_raw(size_t count = 1uz) {
                 size_t bytes_needed = sizeof(T) * count;
                 size_t alignment = alignof(T);
 
@@ -53,13 +53,14 @@ namespace MemoryEngine {
                     throw std::bad_alloc();
                 }
 
-                m_offset = (static_cast<std::byte*>(aligned_ptr) + bytes_needed) - m_buffer.get();
+                // Explicit static_cast converts the ptrdiff_t (long) pointer subtraction safely to size_t
+                m_offset = static_cast<size_t>((static_cast<std::byte*>(aligned_ptr) + bytes_needed) - m_buffer.get());
                 return aligned_ptr;
             }
 
             template <typename T, typename... Args>
             [[nodiscard]] T* allocate(Args&&... args) {
-                void* aligned_ptr = allocate_raw<T>(1);
+                void* aligned_ptr = allocate_raw<T>(1uz);
                 return ::new (aligned_ptr) T(std::forward<Args>(args)...); 
             }
 
