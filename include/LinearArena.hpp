@@ -39,23 +39,27 @@ namespace MemoryEngine {
                 return *this; 
             }
 
-
-
-            template <typename T, typename... Args>
-            [[nodiscard]] T* allocate(Args&&... args) {
-                size_t bytes_needed = sizeof(T);
+            // for when i want to allocate but not instantiate (think resizing vector space but not emplacing objects just yet)
+            template <typename T>
+            [[nodiscard]] void* allocate_raw(size_t count = 1) {
+                size_t bytes_needed = sizeof(T) * count;
                 size_t alignment = alignof(T);
 
                 void* current_ptr = static_cast<void*>(m_buffer.get() + m_offset);
                 size_t space_left = m_capacity - m_offset; 
-
+                
                 void* aligned_ptr = std::align(alignment, bytes_needed, current_ptr, space_left);
                 if (!aligned_ptr) {
                     throw std::bad_alloc();
                 }
 
-                m_offset = m_capacity - space_left + bytes_needed; 
+                m_offset = (static_cast<std::byte*>(aligned_ptr) + bytes_needed) - m_buffer.get();
+                return aligned_ptr;
+            }
 
+            template <typename T, typename... Args>
+            [[nodiscard]] T* allocate(Args&&... args) {
+                void* aligned_ptr = allocate_raw<T>(1);
                 return ::new (aligned_ptr) T(std::forward<Args>(args)...); 
             }
 
