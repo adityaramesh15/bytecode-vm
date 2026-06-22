@@ -4,9 +4,13 @@
 #include "Lexer.hpp"
 #include "AST.hpp"
 #include "Parser.hpp"
+#include "LinearArena.hpp"
+#include "ArenaAllocator.hpp"
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; }; 
-void inspect_ast(const std::vector<AST::ASTNode>& program_ast) {
+
+template <typename Allocator>
+void inspect_ast(const std::vector<AST::ASTNode, Allocator>& program_ast) {
     std::cout << "Successfully compiled " << program_ast.size() << " AST nodes.\n";
 
     for (size_t i = 0; i < program_ast.size(); ++i) {
@@ -37,14 +41,22 @@ auto main() -> int {
             "    CALL print_val\n"
             "    RET";
 
+        std::cout << "Memory Engine Initializing (64MB Linear Region Allocation)...\n";
+        MemoryEngine::LinearArena arena(1024UZ * 1024UZ * 64UZ);
+
+        MemoryEngine::ArenaAllocator<Token> token_allocator(arena);
+        MemoryEngine::ArenaAllocator<AST::ASTNode> ast_allocator(arena);
+
         std::cout << "Frontend Engine Initializing...\n";
         std::cout << "Ingesting raw assembly\n";
 
         Lexer lexer(source_code);
-        std::vector<Token> tokens = lexer.lex_input();
+        std::vector<Token, MemoryEngine::ArenaAllocator<Token>> tokens = lexer.lex_input(token_allocator);
+        std::cout << "    -> Memory consumption post-lex pass: " << arena.bytes_used() << " bytes.\n";
 
-        Parser parser(std::move(tokens));
-        ParseResult<std::vector<AST::ASTNode>> result = parser.parse_program();
+        Parser<MemoryEngine::ArenaAllocator<Token>> parser(std::move(tokens));
+        auto result = parser.parse_program(ast_allocator);
+        std::cout << "    -> Memory consumption post-parse pass: " << arena.bytes_used() << " bytes.\n";
 
         if (!result.has_value()) {
             const SyntaxError& err = result.error();
@@ -54,7 +66,7 @@ auto main() -> int {
             return 1;
         }
 
-        const std::vector<AST::ASTNode>& program_ast = result.value();
+        const auto& program_ast = result.value();
         inspect_ast(program_ast);
 
         std::cout << "\nFrontend Verification Complete. Zero Leaks. All Constraints Valid.\n";

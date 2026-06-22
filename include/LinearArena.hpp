@@ -60,7 +60,7 @@ namespace MemoryEngine {
 
             template <typename T, typename... Args>
             [[nodiscard]] T* allocate(Args&&... args) {
-                void* aligned_ptr = allocate_raw<T>(1uz);
+                void* aligned_ptr = allocate_raw<T>(1UZ);
                 return ::new (aligned_ptr) T(std::forward<Args>(args)...); 
             }
 

@@ -9,12 +9,14 @@
 #include "Lexer.hpp"
 #include "AST.hpp"
 
+template <typename TokenAllocator = std::allocator<Token>>
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens) noexcept : m_tokens(std::move(tokens)) {}
+    explicit Parser(std::vector<Token, TokenAllocator> tokens) noexcept : m_tokens(std::move(tokens)) {}
 
-    ParseResult<std::vector<AST::ASTNode>> parse_program() noexcept {
-        std::vector<AST::ASTNode> program_ast;
+    template <typename ASTAllocator = std::allocator<AST::ASTNode>>
+    ParseResult<std::vector<AST::ASTNode, ASTAllocator>> parse_program(ASTAllocator ast_alloc = ASTAllocator()) noexcept {
+        std::vector<AST::ASTNode, ASTAllocator> program_ast(ast_alloc);
         
         while (!is_at_end()) {
             auto node_result = parse_next_instruction();
@@ -243,6 +245,6 @@ private:
     }
 
 
-    std::vector<Token> m_tokens; 
+    std::vector<Token, TokenAllocator> m_tokens;
     size_t m_cursor{0};
 };

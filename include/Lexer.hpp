@@ -27,8 +27,9 @@ struct Token {
 class Lexer {
     public:
        constexpr Lexer(std::string_view sv = {}) noexcept : m_str_view(sv), m_line(1), m_column(1) {}
-        std::vector<Token> lex_input() noexcept {
-            std::vector<Token> tokens;
+       template <typename Allocator = std::allocator<Token>> 
+       std::vector<Token, Allocator> lex_input(Allocator alloc = Allocator()) noexcept {
+            std::vector<Token, Allocator> tokens(alloc);
 
             while (true) {
                 skip_whitespace_and_comments();
