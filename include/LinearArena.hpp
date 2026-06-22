@@ -41,7 +41,7 @@ namespace MemoryEngine {
 
             // for when i want to allocate but not instantiate (think resizing vector space but not emplacing objects just yet)
             template <typename T>
-            [[nodiscard]] void* allocate_raw(size_t count = 1uz) {
+            [[nodiscard]] void* allocate_raw(size_t count = 1UZ) {
                 size_t bytes_needed = sizeof(T) * count;
                 size_t alignment = alignof(T);
 
