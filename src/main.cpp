@@ -42,7 +42,12 @@ auto main() -> int {
             "    RET";
 
         std::cout << "Memory Engine Initializing (64MB Linear Region Allocation)...\n";
-        MemoryEngine::LinearArena arena(1024UZ * 1024UZ * 64UZ);
+        constexpr size_t ONE_KIB = 1024UZ;
+        constexpr size_t ONE_MIB = ONE_KIB * ONE_KIB;
+        constexpr size_t ARENA_SIZE_MIB = 64UZ;
+        constexpr size_t TOTAL_ARENA_CAPACITY = ARENA_SIZE_MIB * ONE_MIB;
+
+        MemoryEngine::LinearArena arena(TOTAL_ARENA_CAPACITY);
 
         MemoryEngine::ArenaAllocator<Token> token_allocator(arena);
         MemoryEngine::ArenaAllocator<AST::ASTNode> ast_allocator(arena);
