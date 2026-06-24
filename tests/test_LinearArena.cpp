@@ -1,14 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
-// Include the explicit floating-point matchers header required by Catch2 v3
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "LinearArena.hpp"
 #include <cstdint>
+#include <unistd.h>
 
 using namespace MemoryEngine;
 
 TEST_CASE("LinearArena - Structural Instantiation and Reset Mechanics", "[Memory]") {
+    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     LinearArena arena(1024);
-    REQUIRE(arena.capacity() == 1024);
+    
+    REQUIRE(arena.capacity() == system_page_size);
     REQUIRE(arena.bytes_used() == 0);
     
     auto view = arena.current_allocations();
@@ -18,7 +20,6 @@ TEST_CASE("LinearArena - Structural Instantiation and Reset Mechanics", "[Memory
 TEST_CASE("LinearArena - Micro-Architectural Alignment Boundaries", "[Memory]") {
     LinearArena arena(64);
     
-    // Explicitly using auto* to satisfy readability-qualified-auto
     auto* char_ptr = arena.allocate<char>('Z');
     REQUIRE(*char_ptr == 'Z');
     REQUIRE(arena.bytes_used() == 1);
@@ -30,7 +31,6 @@ TEST_CASE("LinearArena - Micro-Architectural Alignment Boundaries", "[Memory]") 
     
     auto* double_ptr = arena.allocate<double>(123.456);
     
-    // Catch2 v3 Idiomatic approach: Use REQUIRE_THAT with the WithinRel matcher
     REQUIRE_THAT(*double_ptr, Catch::Matchers::WithinRel(123.456, 0.00001));
     REQUIRE(arena.bytes_used() == 16);
     
@@ -42,7 +42,6 @@ TEST_CASE("LinearArena - Micro-Architectural Alignment Boundaries", "[Memory]") 
 TEST_CASE("LinearArena - High-Performance O(1) Cleansing Passes", "[Memory]") {
     LinearArena arena(512);
     
-    // Using uppercase 'ULL' to satisfy readability-uppercase-literal-suffix
     auto* ptr1 = arena.allocate<uint64_t>(100ULL);
     auto* ptr2 = arena.allocate<uint64_t>(200ULL);
     REQUIRE(ptr1 != nullptr);
@@ -61,12 +60,15 @@ TEST_CASE("LinearArena - Defensive Boundary Conditions", "[Memory]") {
     LinearArena arena(8);
     
     REQUIRE_NOTHROW(arena.allocate<uint64_t>(0xFFFFFFFFFFFFFFFFULL));
-    REQUIRE_THROWS_AS(arena.allocate<char>('A'), std::bad_alloc);
+    
+    // Adjusted to overflow the actual page-aligned capacity instead of the requested 8 bytes
+    REQUIRE_THROWS_AS(arena.allocate_raw<char>(arena.capacity() + 1UZ), std::bad_alloc);
 }
 
 TEST_CASE("LinearArena - R-Value Move Semantics Ownership Propagation", "[Memory]") {
+    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     LinearArena source(256);
-    // Uppercase 'U' ensures exact unsigned 32-bit typing compliance
+    
     auto* original_allocation = source.allocate<uint32_t>(777U);
     REQUIRE(source.bytes_used() == 4);
     
@@ -75,7 +77,8 @@ TEST_CASE("LinearArena - R-Value Move Semantics Ownership Propagation", "[Memory
     REQUIRE(source.capacity() == 0);
     REQUIRE(source.bytes_used() == 0);
     
-    REQUIRE(destination.capacity() == 256);
+    // Adjusted to validate page-aligned capacity persistence post-move
+    REQUIRE(destination.capacity() == system_page_size);
     REQUIRE(destination.bytes_used() == 4);
     
     auto view = destination.current_allocations();

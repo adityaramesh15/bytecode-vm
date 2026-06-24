@@ -4,15 +4,14 @@
 #include <new> 
 #include <span>
 #include <utility>
+#include "VirtualMemoryBuffer.hpp"
 
 namespace MemoryEngine {
     class LinearArena {
         public:
-            explicit LinearArena(size_t total_capacity_bytes) : m_capacity(total_capacity_bytes), m_offset(0) {
-                if (m_capacity > 0) {
-                    m_buffer = std::make_unique<std::byte[]>(m_capacity);
-                }
-            }
+            explicit LinearArena(size_t total_capacity_bytes) 
+                : m_buffer(total_capacity_bytes, MemoryPermission::ReadWrite),
+                  m_capacity(m_buffer.size()), m_offset(0) {}
 
             ~LinearArena() = default;
             LinearArena(const LinearArena&) = delete;
@@ -45,7 +44,8 @@ namespace MemoryEngine {
                 size_t bytes_needed = sizeof(T) * count;
                 size_t alignment = alignof(T);
 
-                void* current_ptr = static_cast<void*>(m_buffer.get() + m_offset);
+                std::byte* base_ptr = static_cast<std::byte*>(m_buffer.data());
+                void* current_ptr = static_cast<void*>(base_ptr + m_offset);
                 size_t space_left = m_capacity - m_offset; 
                 
                 void* aligned_ptr = std::align(alignment, bytes_needed, current_ptr, space_left);
@@ -53,8 +53,7 @@ namespace MemoryEngine {
                     throw std::bad_alloc();
                 }
 
-                // Explicit static_cast converts the ptrdiff_t (long) pointer subtraction safely to size_t
-                m_offset = static_cast<size_t>((static_cast<std::byte*>(aligned_ptr) + bytes_needed) - m_buffer.get());
+                m_offset = static_cast<size_t>((static_cast<std::byte*>(aligned_ptr) + bytes_needed) - base_ptr);
                 return aligned_ptr;
             }
 
@@ -71,15 +70,15 @@ namespace MemoryEngine {
             [[nodiscard]] size_t capacity() const noexcept { return m_capacity; }
             [[nodiscard]] size_t bytes_used() const noexcept { return m_offset; }
             [[nodiscard]] std::span<std::byte> current_allocations() noexcept {
-                return std::span<std::byte>(m_buffer.get(), m_offset);
+                return std::span<std::byte>(static_cast<std::byte*>(m_buffer.data()), m_offset);
             }
 
             [[nodiscard]] std::span<const std::byte> current_allocations() const noexcept {
-                return std::span<const std::byte>(m_buffer.get(), m_offset);
+                return std::span<const std::byte>(static_cast<const std::byte*>(m_buffer.data()), m_offset);
             }
 
         private:
-            std::unique_ptr<std::byte[]> m_buffer{nullptr};
+            VirtualMemoryBuffer m_buffer; 
             size_t m_capacity{0};
             size_t m_offset{0};
     };
