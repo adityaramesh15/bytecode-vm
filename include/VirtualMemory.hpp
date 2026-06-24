@@ -63,43 +63,67 @@ namespace MemoryEngine {
                 : m_ram(&physical_ram) {
                 for (size_t i = 0; i < 1024UZ; ++i) {
                     m_directory[i] = nullptr;
+                    m_page_table_ref_counts[i] = 0U;
                 }
-                m_max_frames = m_ram -> capacity(); 
+                for (size_t i = 0; i < TLB_SIZE; ++i) {
+                    m_tlb[i] = TLBEntry{};
+                }
             }
             
+            ~MemoryManagementUnit() = default;
+            MemoryManagementUnit(const MemoryManagementUnit&) = delete;
+            MemoryManagementUnit& operator=(const MemoryManagementUnit&) = delete;
+
             std::expected<void, VirtualMemoryError> map_page(uint32_t virtual_address, bool readable, bool writable) noexcept {
                 const uint32_t pdi = (virtual_address >> 22) & 0x3FFU;
                 const uint32_t pti = (virtual_address >> 12) & 0x3FFU;
                 const uint32_t vpn = virtual_address >> 12;
 
                 if (!m_directory[pdi]) {
-                    try {
-                        m_directory[pdi] = m_ram -> allocate<PageTable>();
-                    } catch (const std::bad_alloc&) {
-                        return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
+                    if (m_table_free_list_size > 0UZ) {
+                        m_directory[pdi] = m_table_free_list[--m_table_free_list_size];
+                        for (size_t i = 0; i < 1024UZ; ++i) {
+                            m_directory[pdi]->entries[i].value = 0U;
+                        }
+                    } else {
+                        const size_t space_needed = sizeof(PageTable) + alignof(PageTable);
+                        if (m_ram->capacity() - m_ram->bytes_used() < space_needed) {
+                            return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
+                        }
+                        try {
+                            m_directory[pdi] = m_ram->allocate<PageTable>();
+                        } catch (...) {
+                            return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
+                        }
                     }
+                    m_page_table_ref_counts[pdi] = 0U;
                 }
                 
                 PageTable* table = m_directory[pdi];
-
                 uint32_t assigned_pfn = 0U;
-                if (m_free_list_size > 0UZ) {
-                    assigned_pfn = m_frame_free_list[--m_free_list_size];
+
+                if (table->entries[pti].is_present()) {
+                    assigned_pfn = table->entries[pti].pfn();
                 } else {
-                    if (m_allocated_frames_counter >= m_max_frames) {
-                        return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
+                    if (m_free_list_size > 0UZ) {
+                        assigned_pfn = m_frame_free_list[--m_free_list_size];
+                    } else {
+                        const size_t frame_space_needed = PAGE_SIZE + alignof(std::byte);
+                        if (m_ram->capacity() - m_ram->bytes_used() < frame_space_needed) {
+                            return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
+                        }
+                        try {
+                            (void)m_ram->allocate_raw<std::byte>(PAGE_SIZE);
+                        } catch (...) {
+                            return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
+                        }
+                        assigned_pfn = static_cast<uint32_t>(m_allocated_frames_counter++);
                     }
-                    assigned_pfn = static_cast<uint32_t>(m_allocated_frames_counter++);
-                    try {
-                        (void)m_ram->allocate_raw<std::byte>(PAGE_SIZE);
-                    } catch (...) {
-                        return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
-                    }
+                    m_page_table_ref_counts[pdi]++;
                 }
 
                 table->entries[pti].configure(assigned_pfn, readable, writable);
                 
-                // invalidating the matching line inside local Software TLB cache to guarantee coherence
                 const size_t tlb_index = vpn % TLB_SIZE;
                 if (m_tlb[tlb_index].virtual_page_number == vpn) {
                     m_tlb[tlb_index].valid = false;
@@ -114,14 +138,20 @@ namespace MemoryEngine {
                 const size_t tlb_index = vpn % TLB_SIZE;
 
                 if (m_tlb[tlb_index].valid && m_tlb[tlb_index].virtual_page_number == vpn) {
-                    m_tlb_hits++;
-                    if (require_write && !(m_tlb[tlb_index].permissions & PageTableEntry::FLAG_WRITE)) {
-                        return std::unexpected(VirtualMemoryError::AccessViolation);
+                    if (require_write) {
+                        if (!(m_tlb[tlb_index].permissions & PageTableEntry::FLAG_WRITE)) {
+                            return std::unexpected(VirtualMemoryError::AccessViolation);
+                        }
+                    } else {
+                        if (!(m_tlb[tlb_index].permissions & PageTableEntry::FLAG_READ)) {
+                            return std::unexpected(VirtualMemoryError::AccessViolation);
+                        }
                     }
+                    m_tlb_hits++;
                     return (static_cast<size_t>(m_tlb[tlb_index].physical_frame_number) * PAGE_SIZE) + offset;
                 }
 
-                m_tlb_misses++; // just keeping track of num types we cant use TLB
+                m_tlb_misses++;
                 const uint32_t pdi = (virtual_address >> 22) & 0x3FFU;
                 const uint32_t pti = (virtual_address >> 12) & 0x3FFU;
 
@@ -136,11 +166,12 @@ namespace MemoryEngine {
                     return std::unexpected(VirtualMemoryError::PageFault);
                 }
 
-                if (require_write && !pte.is_writable()) {
-                    return std::unexpected(VirtualMemoryError::AccessViolation);
+                if (require_write) {
+                    if (!pte.is_writable()) return std::unexpected(VirtualMemoryError::AccessViolation);
+                } else {
+                    if (!pte.is_readable()) return std::unexpected(VirtualMemoryError::AccessViolation);
                 }
 
-                // populating the TLB index with the newly translated metadata
                 m_tlb[tlb_index] = TLBEntry{
                     .virtual_page_number = vpn,
                     .physical_frame_number = pte.pfn(),
@@ -164,6 +195,13 @@ namespace MemoryEngine {
                         m_frame_free_list[m_free_list_size++] = table->entries[pti].pfn();
                     }
                     table->entries[pti].value = 0U; 
+                    
+                    if (--m_page_table_ref_counts[pdi] == 0U) {
+                        if (m_table_free_list_size < MAX_TRACKED_TABLES) {
+                            m_table_free_list[m_table_free_list_size++] = m_directory[pdi];
+                        }
+                        m_directory[pdi] = nullptr;
+                    }
                 }
 
                 const size_t tlb_index = vpn % TLB_SIZE;
@@ -179,6 +217,7 @@ namespace MemoryEngine {
         private:
             LinearArena* m_ram{nullptr};
             PageTable* m_directory[1024UZ];
+            uint16_t m_page_table_ref_counts[1024UZ];
 
             TLBEntry m_tlb[TLB_SIZE]; 
 
@@ -186,14 +225,13 @@ namespace MemoryEngine {
             uint32_t m_frame_free_list[MAX_TRACKED_FRAMES]{0U};
             size_t m_free_list_size{0UZ};
 
+            static constexpr size_t MAX_TRACKED_TABLES = 1024UZ;
+            PageTable* m_table_free_list[MAX_TRACKED_TABLES]{nullptr};
+            size_t m_table_free_list_size{0UZ};
+
             size_t m_allocated_frames_counter{0UZ};
-            size_t m_max_frames{0UZ};
             
             size_t m_tlb_hits{0UZ};
             size_t m_tlb_misses{0UZ};
     };
-
-
-
-
 }
