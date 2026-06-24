@@ -56,7 +56,7 @@ template <typename Container>
 uint32_t build_flat_tree(int depth, std::mt19937& rng, Container& storage) {
     if (depth <= 0) return FlatNode::NullIndex;
 
-    uint32_t current_idx = static_cast<uint32_t>(storage.size());
+    auto current_idx = static_cast<uint32_t>(storage.size());
     storage.emplace_back(FlatNode{FlatNode::NullIndex, FlatNode::NullIndex, 0, 0});
 
     storage[current_idx].value = rng() % 100;

@@ -44,8 +44,8 @@ namespace MemoryEngine {
                 size_t bytes_needed = sizeof(T) * count;
                 size_t alignment = alignof(T);
 
-                std::byte* base_ptr = static_cast<std::byte*>(m_buffer.data());
-                void* current_ptr = static_cast<void*>(base_ptr + m_offset);
+                auto* base_ptr = static_cast<std::byte*>(m_buffer.data());
+                auto current_ptr = static_cast<void*>(base_ptr + m_offset);
                 size_t space_left = m_capacity - m_offset; 
                 
                 void* aligned_ptr = std::align(alignment, bytes_needed, current_ptr, space_left);

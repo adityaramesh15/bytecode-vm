@@ -7,7 +7,7 @@
 using namespace MemoryEngine;
 
 TEST_CASE("LinearArena - Structural Instantiation and Reset Mechanics", "[Memory]") {
-    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const auto system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     LinearArena arena(1024);
     
     REQUIRE(arena.capacity() == system_page_size);
