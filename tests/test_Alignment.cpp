@@ -59,3 +59,10 @@ TEST_CASE("Memory Engine - Varying Structural Layout Evaluation Boundary Constra
     REQUIRE(optimized_report.total_padding == 6); // Wasted space is unavoidable due to trailing rounding boundaries
     REQUIRE(optimized_subsystem[0].name == "immediate_val");
 }
+
+TEST_CASE("Memory Engine - Rejects zero alignment members", "[Memory]") {
+    std::vector<StructMember> invalid_layout = {
+        {"bad_field", 4, 0}
+    };
+    REQUIRE_THROWS_AS(StructOptimizer::evaluate_layout(invalid_layout), std::invalid_argument);
+}

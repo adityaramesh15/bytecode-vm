@@ -1,10 +1,16 @@
 #pragma once
 #include <cstddef>
-#include <sys/mman.h>
-#include <unistd.h>
 #include <stdexcept>
 #include <utility>
 #include <memory>
+
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 namespace MemoryEngine {
     enum class MemoryPermission : uint8_t {
@@ -21,18 +27,31 @@ namespace MemoryEngine {
             VirtualMemoryBuffer() noexcept : m_address(nullptr), m_size(0) {}
 
             explicit VirtualMemoryBuffer(size_t size, MemoryPermission initial_perm = MemoryPermission::ReadWrite) {
-                size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE)); 
+                size_t page_size = 0;
+#if defined(_WIN32)
+                SYSTEM_INFO si;
+                GetSystemInfo(&si);
+                page_size = static_cast<size_t>(si.dwPageSize);
+#else
+                page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE)); 
+#endif
                 
                 m_size = ((size + page_size - 1) / page_size) * page_size; 
 
-                int prot = translate_permissions(initial_perm);
-
+#if defined(_WIN32)
+                DWORD flProtect = translate_permissions_win(initial_perm);
+                m_address = ::VirtualAlloc(nullptr, m_size, MEM_COMMIT | MEM_RESERVE, flProtect);
+                if (!m_address) {
+                    throw std::bad_alloc();
+                }
+#else
+                int prot = translate_permissions_posix(initial_perm);
                 m_address = ::mmap(nullptr, m_size, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0); 
                 if (m_address == MAP_FAILED) {
                     throw std::bad_alloc();
                 }
+#endif
             }
-            
 
             VirtualMemoryBuffer(const VirtualMemoryBuffer&) = delete;
             VirtualMemoryBuffer& operator=(const VirtualMemoryBuffer&) = delete;
@@ -60,14 +79,19 @@ namespace MemoryEngine {
       
             bool protect(MemoryPermission perm) noexcept {
                 if (!m_address || m_size == 0) return false;
-                int prot = translate_permissions(perm);
+#if defined(_WIN32)
+                DWORD flOldProtect = 0;
+                DWORD flNewProtect = translate_permissions_win(perm);
+                return ::VirtualProtect(m_address, m_size, flNewProtect, &flOldProtect) != 0;
+#else
+                int prot = translate_permissions_posix(perm);
                 return ::mprotect(m_address, m_size, prot) == 0;
+#endif
             }
 
             [[nodiscard]] void* data() const noexcept { return m_address; }
             [[nodiscard]] size_t size() const noexcept { return m_size; }
             [[nodiscard]] bool is_allocated() const noexcept { return m_address != nullptr; }
-      
       
         private:
             void* m_address{nullptr};
@@ -75,13 +99,35 @@ namespace MemoryEngine {
 
             void release() noexcept {
                 if (m_address && m_size > 0) {
+#if defined(_WIN32)
+                    ::VirtualFree(m_address, 0, MEM_RELEASE);
+#else
                     ::munmap(m_address, m_size);
+#endif
                     m_address = nullptr;
                     m_size = 0;
                 }
             }
 
-            [[nodiscard]] constexpr int translate_permissions(MemoryPermission perm) {
+#if defined(_WIN32)
+            [[nodiscard]] constexpr DWORD translate_permissions_win(MemoryPermission perm) noexcept {
+                uint8_t raw_perm = static_cast<uint8_t>(perm);
+                bool r = (raw_perm & static_cast<uint8_t>(MemoryPermission::Read)) != 0;
+                bool w = (raw_perm & static_cast<uint8_t>(MemoryPermission::Write)) != 0;
+                bool x = (raw_perm & static_cast<uint8_t>(MemoryPermission::Exec)) != 0;
+
+                if (x) {
+                    if (w) return PAGE_EXECUTE_READWRITE;
+                    if (r) return PAGE_EXECUTE_READ;
+                    return PAGE_EXECUTE;
+                } else {
+                    if (w) return PAGE_READWRITE;
+                    if (r) return PAGE_READONLY;
+                    return PAGE_NOACCESS;
+                }
+            }
+#else
+            [[nodiscard]] constexpr int translate_permissions_posix(MemoryPermission perm) noexcept {
                 int prot = PROT_NONE;
                 uint8_t raw_perm = static_cast<uint8_t>(perm);
                 if (raw_perm & static_cast<uint8_t>(MemoryPermission::Read))  prot |= PROT_READ;
@@ -89,5 +135,6 @@ namespace MemoryEngine {
                 if (raw_perm & static_cast<uint8_t>(MemoryPermission::Exec))  prot |= PROT_EXEC;
                 return prot;
             }
+#endif
     };
 }

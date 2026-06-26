@@ -66,7 +66,7 @@ TEST_CASE("LinearArena - Defensive Boundary Conditions", "[Memory]") {
 }
 
 TEST_CASE("LinearArena - R-Value Move Semantics Ownership Propagation", "[Memory]") {
-    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const auto system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     LinearArena source(256);
     
     auto* original_allocation = source.allocate<uint32_t>(777U);

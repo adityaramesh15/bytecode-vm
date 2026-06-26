@@ -59,7 +59,7 @@ auto main() -> int {
         std::vector<Token, MemoryEngine::ArenaAllocator<Token>> tokens = lexer.lex_input(token_allocator);
         std::cout << "    -> Memory consumption post-lex pass: " << arena.bytes_used() << " bytes.\n";
 
-        Parser<MemoryEngine::ArenaAllocator<Token>> parser(std::move(tokens));
+        Parser<MemoryEngine::ArenaAllocator<Token>> parser(std::move(tokens), arena);
         auto result = parser.parse_program(ast_allocator);
         std::cout << "    -> Memory consumption post-parse pass: " << arena.bytes_used() << " bytes.\n";
 

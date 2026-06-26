@@ -9,7 +9,8 @@ namespace MemoryEngine {
         PageFault,
         AccessViolation,
         OutOfPhysicalMemory,
-        InvalidPermissions
+        InvalidPermissions,
+        ResourceRecyclerOverflow
     };
 
     struct PageTableEntry {
@@ -41,9 +42,14 @@ namespace MemoryEngine {
         [[nodiscard]] constexpr bool is_writable() const noexcept { return (value & FLAG_WRITE) != 0; }
     };
 
-    struct PageTable {
+    // aligning page tables and physical frames since both are on same system ram contiguously
+    struct alignas(4096) PageTable {
         PageTableEntry entries[1024UZ]; // 10 bits outer, 10 bits inner
     };
+
+    struct alignas(4096) PhysicalFrame {
+        std::byte data[4096];
+    }; 
 
     // Translation Lookaside Buffer (to cache frequent page to frame lookups)
     struct TLBEntry {
@@ -61,6 +67,8 @@ namespace MemoryEngine {
 
             explicit MemoryManagementUnit(LinearArena& physical_ram) noexcept
                 : m_ram(&physical_ram) {
+                
+                m_ram -> pin();  // claiming pinned memory in Arena
                 for (size_t i = 0; i < 1024UZ; ++i) {
                     m_directory[i] = nullptr;
                     m_page_table_ref_counts[i] = 0U;
@@ -70,7 +78,11 @@ namespace MemoryEngine {
                 }
             }
             
-            ~MemoryManagementUnit() = default;
+            ~MemoryManagementUnit() noexcept {
+                if (m_ram) {
+                    m_ram -> unpin();
+                }
+            }
             MemoryManagementUnit(const MemoryManagementUnit&) = delete;
             MemoryManagementUnit& operator=(const MemoryManagementUnit&) = delete;
 
@@ -108,16 +120,19 @@ namespace MemoryEngine {
                     if (m_free_list_size > 0UZ) {
                         assigned_pfn = m_frame_free_list[--m_free_list_size];
                     } else {
-                        const size_t frame_space_needed = PAGE_SIZE + alignof(std::byte);
+                        const size_t frame_space_needed = sizeof(PhysicalFrame) + alignof(PhysicalFrame);
                         if (m_ram->capacity() - m_ram->bytes_used() < frame_space_needed) {
                             return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
                         }
                         try {
-                            (void)m_ram->allocate_raw<std::byte>(PAGE_SIZE);
+                            void* frame_ptr = m_ram -> allocate_raw<PhysicalFrame>(1UZ);
+                            std::byte* arena_base = static_cast<std::byte*>(m_ram -> current_allocations().data()); 
+                            
+                            // take the allocation ptr, subtract arena start to get offset, divide by frame size to get PFN
+                            assigned_pfn = static_cast<uint32_t>((static_cast<std::byte*>(frame_ptr) - arena_base) / PAGE_SIZE);
                         } catch (...) {
                             return std::unexpected(VirtualMemoryError::OutOfPhysicalMemory);
                         }
-                        assigned_pfn = static_cast<uint32_t>(m_allocated_frames_counter++);
                     }
                     m_page_table_ref_counts[pdi]++;
                 }
@@ -182,24 +197,30 @@ namespace MemoryEngine {
                 return (static_cast<size_t>(pte.pfn()) * PAGE_SIZE) + offset;
             }            
 
-            void unmap_page(uint32_t virtual_address) noexcept {
+            std::expected<void, VirtualMemoryError> unmap_page(uint32_t virtual_address) noexcept {
                 const uint32_t pdi = (virtual_address >> 22) & 0x3FFU;
                 const uint32_t pti = (virtual_address >> 12) & 0x3FFU;
                 const uint32_t vpn = virtual_address >> 12;
 
-                if (!m_directory[pdi]) return;
+                if (!m_directory[pdi]) return {};
 
                 PageTable* table = m_directory[pdi];
                 if (table->entries[pti].is_present()) {
-                    if (m_free_list_size < MAX_TRACKED_FRAMES) {
-                        m_frame_free_list[m_free_list_size++] = table->entries[pti].pfn();
+                    const uint32_t pfn = table->entries[pti].pfn();
+                    const bool will_release_table = (m_page_table_ref_counts[pdi] == 1U);
+
+                    if (m_free_list_size >= MAX_TRACKED_FRAMES) {
+                        return std::unexpected(VirtualMemoryError::ResourceRecyclerOverflow);
                     }
-                    table->entries[pti].value = 0U; 
-                    
+                    if (will_release_table && m_table_free_list_size >= MAX_TRACKED_TABLES) {
+                        return std::unexpected(VirtualMemoryError::ResourceRecyclerOverflow);
+                    }
+
+                    m_frame_free_list[m_free_list_size++] = pfn;
+                    table->entries[pti].value = 0U;
+
                     if (--m_page_table_ref_counts[pdi] == 0U) {
-                        if (m_table_free_list_size < MAX_TRACKED_TABLES) {
-                            m_table_free_list[m_table_free_list_size++] = m_directory[pdi];
-                        }
+                        m_table_free_list[m_table_free_list_size++] = m_directory[pdi];
                         m_directory[pdi] = nullptr;
                     }
                 }
@@ -208,11 +229,12 @@ namespace MemoryEngine {
                 if (m_tlb[tlb_index].virtual_page_number == vpn) {
                     m_tlb[tlb_index].valid = false;
                 }
+
+                return {};
             }
 
             [[nodiscard]] size_t tlb_hits() const noexcept { return m_tlb_hits; }
-            [[nodiscard]] size_t tlb_misses() const noexcept { return m_tlb_misses; }
-            [[nodiscard]] size_t allocated_frames() const noexcept { return m_allocated_frames_counter; }            
+            [[nodiscard]] size_t tlb_misses() const noexcept { return m_tlb_misses; }         
 
         private:
             LinearArena* m_ram{nullptr};
@@ -228,8 +250,6 @@ namespace MemoryEngine {
             static constexpr size_t MAX_TRACKED_TABLES = 1024UZ;
             PageTable* m_table_free_list[MAX_TRACKED_TABLES]{nullptr};
             size_t m_table_free_list_size{0UZ};
-
-            size_t m_allocated_frames_counter{0UZ};
             
             size_t m_tlb_hits{0UZ};
             size_t m_tlb_misses{0UZ};

@@ -13,8 +13,10 @@ template <typename T>
 concept IsInstruction = std::is_trivially_copyable_v<T> && requires(T ins){
     requires std::is_enum_v<decltype(ins.opcode)>;
     requires std::integral<decltype(ins.operand_count)>;
-    
-    { ins.operands[0] }; 
+    requires std::extent_v<decltype(ins.operands)> >= 2;
+
+    { ins.operands[0] };
+    { ins.operands[1] };
 
     requires sizeof(T) <= 64;
 };

@@ -27,8 +27,10 @@ struct Token {
 class Lexer {
     public:
        constexpr Lexer(std::string_view sv = {}) noexcept : m_str_view(sv), m_line(1), m_column(1) {}
+       
+       // removed noexcept since underlying vector memory allocation for push_back() could throw std::bad_alloc via LinearArena
        template <typename Allocator = std::allocator<Token>> 
-       std::vector<Token, Allocator> lex_input(Allocator alloc = Allocator()) noexcept {
+       std::vector<Token, Allocator> lex_input(Allocator alloc = Allocator()) {
             std::vector<Token, Allocator> tokens(alloc);
 
             while (true) {
@@ -98,11 +100,11 @@ class Lexer {
                 return Token{TokenType::Comma, lexeme, token_start_line, token_start_col};
             } 
 
-            if (std::isdigit(c) || (c == '-' && std::isdigit(m_str_view.size() > 1 ? m_str_view[1] : '\0'))) {
+            if (std::isdigit(static_cast<unsigned char>(c)) || (c == '-' && std::isdigit(static_cast<unsigned char>(m_str_view.size() > 1 ? m_str_view[1] : '\0')))) {
                 size_t length = 0;
                 if (peek() == '-') length++;
 
-                while (length < m_str_view.size() && std::isdigit(m_str_view[length])) {
+                while (length < m_str_view.size() && std::isdigit(static_cast<unsigned char>(m_str_view[length]))) {
                     length++;
                 }
                 
@@ -111,9 +113,9 @@ class Lexer {
                 return Token{TokenType::Immediate, lexeme, token_start_line, token_start_col};
             }
 
-            if (std::isalpha(c) || c == '_') {
+            if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
                 size_t length = 0;
-                while (length < m_str_view.size() && (std::isalnum(m_str_view[length]) || m_str_view[length] == '_')) {
+                while (length < m_str_view.size() && (std::isalnum(static_cast<unsigned char>(m_str_view[length])) || m_str_view[length] == '_')) {
                     length++;
                 }
 

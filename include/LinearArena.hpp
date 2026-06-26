@@ -4,6 +4,7 @@
 #include <new> 
 #include <span>
 #include <utility>
+#include <cassert>
 #include "VirtualMemoryBuffer.hpp"
 
 namespace MemoryEngine {
@@ -11,7 +12,7 @@ namespace MemoryEngine {
         public:
             explicit LinearArena(size_t total_capacity_bytes) 
                 : m_buffer(total_capacity_bytes, MemoryPermission::ReadWrite),
-                  m_capacity(m_buffer.size()), m_offset(0) {}
+                  m_capacity(m_buffer.size()), m_offset(0), m_pin_count(0) {}
 
             ~LinearArena() = default;
             LinearArena(const LinearArena&) = delete;
@@ -20,20 +21,28 @@ namespace MemoryEngine {
             LinearArena(LinearArena&& other) noexcept : 
                 m_buffer(std::move(other.m_buffer)), 
                 m_capacity(other.m_capacity), 
-                m_offset(other.m_offset) 
+                m_offset(other.m_offset),
+                m_pin_count(other.m_pin_count)
             {
+                assert(other.m_pin_count == 0 && "Lifecycle Violation: Cannot move a LinearArena while active dependencies are pinned.");
                 other.m_capacity = 0;
                 other.m_offset = 0;    
+                other.m_pin_count = 0;
             }
 
             LinearArena& operator=(LinearArena&& other) noexcept {
                 if (this != &other) {
+                    assert(m_pin_count == 0 && "Lifecycle Violation: Cannot overwrite an active pinned LinearArena.");
+                    assert(other.m_pin_count == 0 && "Lifecycle Violation: Cannot move an active pinned LinearArena.");
+
                     m_buffer = std::move(other.m_buffer);
                     m_capacity = other.m_capacity;
                     m_offset = other.m_offset;
+                    m_pin_count = other.m_pin_count;
                     
                     other.m_capacity = 0;
                     other.m_offset = 0;
+                    other.m_pin_count = 0;
                 }
                 return *this; 
             }
@@ -59,13 +68,23 @@ namespace MemoryEngine {
 
             template <typename T, typename... Args>
             [[nodiscard]] T* allocate(Args&&... args) {
+                static_assert(std::is_trivially_destructible_v<T>, "Architecture Constraint Violation: LinearArena can only allocate trivially destructible types to ensure safe fast resets.");
+
                 void* aligned_ptr = allocate_raw<T>(1UZ);
                 return ::new (aligned_ptr) T(std::forward<Args>(args)...); 
             }
 
-            void reset() noexcept {
+            void reset() {
+                
+                if (m_pin_count > 0) {
+                    throw std::runtime_error("Security Violation: Cannot reset LinearArena while active subsystems hold live memory pins.");
+                }
                 m_offset = 0; 
             }
+
+            void pin() noexcept { ++m_pin_count; }
+            void unpin() noexcept { if (m_pin_count > 0) --m_pin_count; }
+            [[nodiscard]] bool is_pinned() const noexcept { return m_pin_count > 0; }
 
             [[nodiscard]] size_t capacity() const noexcept { return m_capacity; }
             [[nodiscard]] size_t bytes_used() const noexcept { return m_offset; }
@@ -81,5 +100,6 @@ namespace MemoryEngine {
             VirtualMemoryBuffer m_buffer; 
             size_t m_capacity{0};
             size_t m_offset{0};
+            size_t m_pin_count{0};          // a counter to track system dependencies in Arena (for safe clearing)
     };
 }

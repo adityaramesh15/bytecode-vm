@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstddef>
+#include <stdexcept>
 
 namespace MemoryEngine {
     
@@ -31,6 +32,9 @@ namespace MemoryEngine {
                 size_t max_align = 1;
 
                 for (const auto& member : members) {
+                    if (member.alignment == 0UZ) {
+                        throw std::invalid_argument("StructMember alignment must be non-zero");
+                    }
                     max_align = std::max(max_align, member.alignment);
                     
                     // determining the compiler padding bytes required to align this specific field

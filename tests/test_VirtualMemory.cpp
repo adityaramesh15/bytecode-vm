@@ -30,6 +30,29 @@ TEST_CASE("Virtual Memory - Core 2-Level Translation Pass", "[VirtualMemory]") {
     REQUIRE((*trans_res2 - *trans_res1) == 0x10UZ);
 }
 
+TEST_CASE("Virtual Memory - Translated address does not alias page table storage", "[VirtualMemory]") {
+    LinearArena arena(1024UZ * 1024UZ);
+    MemoryManagementUnit mmu(arena);
+
+    const size_t arena_base_before = arena.bytes_used();
+
+    uint32_t vaddr = 0x00402000U;
+    REQUIRE(mmu.map_page(vaddr, true, true).has_value());
+
+    auto phys = mmu.translate(vaddr, true);
+    REQUIRE(phys.has_value());
+
+    // Page-table metadata lives at the start of the arena; user data must not overlap it.
+    REQUIRE(*phys >= sizeof(PageTable));
+
+    auto* arena_base = static_cast<std::byte*>(arena.current_allocations().data());
+    constexpr std::byte marker{0xAB};
+    arena_base[*phys] = marker;
+
+    REQUIRE(arena_base[0] != marker);
+    REQUIRE(arena_base[*phys] == marker);
+}
+
 TEST_CASE("Virtual Memory - Sparse Space and Permission Safeguards", "[VirtualMemory]") {
     LinearArena arena(1024UZ * 512UZ);
     MemoryManagementUnit mmu(arena);
@@ -58,13 +81,13 @@ TEST_CASE("Virtual Memory - Frame Recycler Cleanup Pipeline", "[VirtualMemory]")
 
     uint32_t target_addr = 0x30000000U;
     
-    // Map, check allocation counter, then free the range layout
+    // Map, record arena footprint, then free the range layout
     REQUIRE(mmu.map_page(target_addr, true, true).has_value());
-    REQUIRE(mmu.allocated_frames() == 1);
+    const size_t footprint_after_first_map = arena.bytes_used();
 
-    mmu.unmap_page(target_addr);
+    REQUIRE(mmu.unmap_page(target_addr).has_value());
 
     // Re-mapping should pull the frame straight out of the internal Recycler Free List
     REQUIRE(mmu.map_page(0x40000000U, true, true).has_value());
-    REQUIRE(mmu.allocated_frames() == 1); // Total physical footprint remains exactly 1!
+    REQUIRE(arena.bytes_used() == footprint_after_first_map);
 }
