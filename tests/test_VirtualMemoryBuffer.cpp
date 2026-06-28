@@ -7,7 +7,7 @@
 using namespace MemoryEngine;
 
 TEST_CASE("Virtual Memory Allocation - Hardware Page Rounding Granularity", "[VirtualMemory]") {
-    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const auto system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     
     // Assert page size is precisely 16KB on Apple Silicon ARM64 platforms
 #if defined(__APPLE__) && defined(__arm64__)
@@ -29,7 +29,7 @@ TEST_CASE("Virtual Memory Allocation - Hardware Page Rounding Granularity", "[Vi
 }
 
 TEST_CASE("Virtual Memory Allocation - Strict Move Semantics & RAII Transfer", "[VirtualMemory]") {
-    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const auto system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     
     SECTION("Move constructor shifts ownership without kernel reallocation leaks") {
         VirtualMemoryBuffer source(system_page_size);
@@ -63,7 +63,7 @@ TEST_CASE("Virtual Memory Allocation - Strict Move Semantics & RAII Transfer", "
 }
 
 TEST_CASE("Virtual Memory Allocation - Hardware Permission Boundary Transitions", "[VirtualMemory]") {
-    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const auto system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     VirtualMemoryBuffer buffer(system_page_size, MemoryPermission::ReadWrite);
     
     REQUIRE(buffer.is_allocated());
@@ -86,7 +86,7 @@ TEST_CASE("Virtual Memory Allocation - Hardware Permission Boundary Transitions"
 }
 
 TEST_CASE("LinearArena Integration - Direct Page-Backed Processing Matrix", "[Memory]") {
-    const size_t system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const auto system_page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     
     // Request an allocation smaller than one page
     LinearArena arena(1024UZ);
