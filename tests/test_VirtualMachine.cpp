@@ -103,8 +103,8 @@ TEST_CASE("VirtualMachine - unsupported opcode on load", "[VirtualMachine]") {
     auto ast = parser.parse_program();
     REQUIRE(ast.has_value());
 
-    VirtualMachine vm;
-    auto load_result = vm.load_program(std::span{ast->data(), ast->size()});
+    VirtualMachine virtual_machine;
+    auto load_result = virtual_machine.load_program(std::span{ast->data(), ast->size()});
     REQUIRE_FALSE(load_result.has_value());
     REQUIRE(load_result.error() == VMError::UnsupportedOpcode);
 }
@@ -118,10 +118,10 @@ TEST_CASE("VirtualMachine - reset clears register state", "[VirtualMachine]") {
 }
 
 TEST_CASE("VirtualMachine - empty program run succeeds", "[VirtualMachine]") {
-    VirtualMachine vm;
-    auto run_result = vm.run();
+    VirtualMachine virtual_machine;
+    auto run_result = virtual_machine.run();
     REQUIRE(run_result.has_value());
-    REQUIRE(vm.program_size() == 0);
+    REQUIRE(virtual_machine.program_size() == 0);
 }
 
 TEST_CASE("VirtualMachine - arithmetic chain", "[VirtualMachine]") {

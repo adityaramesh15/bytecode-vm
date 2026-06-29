@@ -34,8 +34,6 @@ TEST_CASE("Virtual Memory - Translated address does not alias page table storage
     LinearArena arena(1024UZ * 1024UZ);
     MemoryManagementUnit mmu(arena);
 
-    const size_t arena_base_before = arena.bytes_used();
-
     uint32_t vaddr = 0x00402000U;
     REQUIRE(mmu.map_page(vaddr, true, true).has_value());
 
