@@ -14,7 +14,7 @@ template <typename TokenAllocator = std::allocator<Token>>
 class Parser {
 public:
     explicit Parser(std::vector<Token, TokenAllocator> tokens, MemoryEngine::LinearArena& arena)
-        : m_tokens(std::move(tokens)), m_arena(&arena) {
+        : m_arena(&arena), m_tokens(std::move(tokens)) {
         m_arena->pin();
     }
 
@@ -27,7 +27,7 @@ public:
     Parser(const Parser&) = delete;
     Parser& operator=(const Parser&) = delete;
     Parser(Parser&& other) noexcept
-        : m_tokens(std::move(other.m_tokens)), m_cursor(other.m_cursor), m_arena(other.m_arena) {
+        : m_arena(other.m_arena), m_tokens(std::move(other.m_tokens)), m_cursor(other.m_cursor) {
         other.m_arena = nullptr;
     }
     Parser& operator=(Parser&& other) noexcept {
