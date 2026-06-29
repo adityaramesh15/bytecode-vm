@@ -9,13 +9,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Apple Clang uses libc++ natively; Linux Clang uses default libstdc++ to avoid
-# Ubuntu packaged libc++/ASan alloc-dealloc-mismatch on exception teardown.
+# libc++ is required for C++23 std::expected under clang-tidy on Ubuntu.
+# ASan alloc-dealloc-mismatch on exception teardown is handled in CI via ASAN_OPTIONS.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(APPLE)
-        add_compile_options(-stdlib=libc++ -fexperimental-library)
-        add_link_options(-stdlib=libc++ -lc++abi)
-    endif()
+    add_compile_options(-stdlib=libc++ -fexperimental-library)
+    add_link_options(-stdlib=libc++ -lc++abi)
 endif()
 
 # Apply runtime sanitizers globally so FetchContent deps (Catch2) share instrumentation
@@ -112,8 +110,13 @@ find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
 if(CLANG_TIDY_EXE)
     message(STATUS "DevDiv Toolchain: Configuring localized static analysis passes.")
     
+    set(CLANG_TIDY_COMMON_ARGS
+        "--extra-arg=-std=c++23"
+    )
+
     set(CORE_CLANG_TIDY_CHECKS
         ${CLANG_TIDY_EXE}
+        ${CLANG_TIDY_COMMON_ARGS}
         "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*"
         "-warnings-as-errors=*"
     )
@@ -121,6 +124,7 @@ if(CLANG_TIDY_EXE)
     # ADDED EXCLUSIONS: Suppress macro complexity and trailing returns for Catch2 compatibility
     set(TEST_CLANG_TIDY_CHECKS
         ${CLANG_TIDY_EXE}
+        ${CLANG_TIDY_COMMON_ARGS}
         "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*,-cert-err58-cpp,-bugprone-chained-comparison,-readability-magic-numbers,-bugprone-use-after-move,-modernize-avoid-c-arrays,-readability-function-cognitive-complexity,-modernize-use-trailing-return-type"
         "-warnings-as-errors=*"
     )

@@ -112,8 +112,11 @@ TEST_CASE("VirtualMachine - unsupported opcode on load", "[VirtualMachine]") {
 TEST_CASE("VirtualMachine - reset clears register state", "[VirtualMachine]") {
     auto fixture = VMFixture::run("MOV R3, 99");
     REQUIRE(fixture.vm.read_register(3) == 99);
+    REQUIRE(fixture.vm.instruction_pointer() > 0);
     fixture.vm.reset();
     REQUIRE(fixture.vm.read_register(3) == 0);
+    REQUIRE(fixture.vm.instruction_pointer() == 0);
+    REQUIRE(fixture.vm.stack_pointer() == 0);
     REQUIRE_FALSE(fixture.vm.is_running());
 }
 

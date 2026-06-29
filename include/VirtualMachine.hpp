@@ -21,9 +21,31 @@ enum class VMError : uint8_t {
 template <typename T>
 using VMResult = std::expected<T, VMError>;
 
+
+struct RegisterFile {
+    static constexpr size_t GPR_COUNT = 16UZ;
+
+    alignas(64) std::array<int64_t, GPR_COUNT> gpr{};   // R0 through R15
+    size_t ip{0};
+    size_t sp{0};
+
+    void reset() noexcept {
+        gpr.fill(0);
+        ip = 0UZ;
+        sp = 0UZ;
+    }
+
+    [[nodiscard]] int64_t read_gpr(uint8_t index) const {
+        return gpr.at(index);
+    }
+};
+
+static_assert(alignof(RegisterFile) >= 64);
+static_assert(sizeof(RegisterFile{}.gpr) == 128);
+static_assert(sizeof(RegisterFile) <= 256);
+
 class VirtualMachine {
     public:
-        static constexpr size_t REGISTER_COUNT = 16UZ;
         VirtualMachine() = default;
 
         VMResult<void> load_program(std::span<const AST::ASTNode> ast) {
@@ -54,15 +76,15 @@ class VirtualMachine {
             }
 
             m_running = true;
-            m_ip = 0UZ;
+            m_cpu.ip = 0UZ;
 
             while (m_running) {
-                if (m_ip >= m_program.size()) {
+                if (m_cpu.ip >= m_program.size()) {
                     m_running = false;
                     break;
                 }
 
-                auto result = step(m_program[m_ip]);
+                auto result = step(m_program[m_cpu.ip]);
                 if (!result) {
                     m_running = false;
                     return result;
@@ -73,22 +95,21 @@ class VirtualMachine {
         }
 
         void reset() noexcept {
-            m_regs.fill(0);
-            m_ip = 0UZ;
+            m_cpu.reset();
             m_running = false;
         }
 
         [[nodiscard]] int64_t read_register(uint8_t index) const {
-            return m_regs.at(index);
+            return m_cpu.read_gpr(index);
         }
 
-        [[nodiscard]] size_t instruction_pointer() const noexcept { return m_ip; }
+        [[nodiscard]] size_t instruction_pointer() const noexcept { return m_cpu.ip; }
+        [[nodiscard]] size_t stack_pointer() const noexcept { return m_cpu.sp; }
         [[nodiscard]] bool is_running() const noexcept { return m_running; }
         [[nodiscard]] size_t program_size() const noexcept { return m_program.size(); }
 
     private:
-        std::array<int64_t, REGISTER_COUNT> m_regs{};
-        size_t m_ip{0UZ};
+        RegisterFile m_cpu; 
         bool m_running{false};
 
         std::vector<Instruction> m_program;
@@ -128,7 +149,7 @@ class VirtualMachine {
 
 
         [[nodiscard]] VMResult<uint8_t> register_index(VirtualRegister reg) const noexcept {
-            if (reg.index >= REGISTER_COUNT) {
+            if (reg.index >= RegisterFile::GPR_COUNT) {
                 return std::unexpected(VMError::InvalidRegister);
             }
             return reg.index;
@@ -149,7 +170,7 @@ class VirtualMachine {
                     if (!idx) {
                         return std::unexpected(idx.error());
                     }
-                    return m_regs[*idx];
+                    return m_cpu.read_gpr(*idx);
                 } else if constexpr (std::is_same_v<T, int64_t>) {
                     return value;
                 } else {
@@ -192,7 +213,7 @@ class VirtualMachine {
             }
 
             if (inst.opcode != Opcode::JMP) {
-                ++m_ip;
+                ++m_cpu.ip; 
             }
 
             return {};
@@ -208,7 +229,7 @@ class VirtualMachine {
             if (!src) {
                 return std::unexpected(src.error());
             }
-            apply(m_regs[*dest], *src);
+            apply(m_cpu.gpr[*dest], *src);
             return {};
         }
 
@@ -234,7 +255,7 @@ class VirtualMachine {
             if (it == m_labels.end()) {
                 return std::unexpected(VMError::UnknownLabel);
             }
-            m_ip = it->second;
+            m_cpu.ip = it->second;
             return {};
         }
 };
