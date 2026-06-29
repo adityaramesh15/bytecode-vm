@@ -80,13 +80,12 @@ The system is partitioned into four decoupled core subsystems:
 ### Compilation Sequence
 
 ```bash
-# Configure the build system with diagnostics sanitizers enabled
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-
-# Compile the target test runner binaries
-cmake --build build --target vm_tests
+# Configure and build with the same preset used by CI (ASan, UBSan, clang-tidy)
+cmake --preset ci
+cmake --build --preset ci
 
 # Run the test evaluation matrix
 ./build/vm_tests
-
 ```
+
+On macOS, Clang uses Apple libc++; on Linux CI, Clang uses libstdc++. Both run the same sanitizers, warnings, and clang-tidy checks. For exact Ubuntu reproduction on macOS, use an Ubuntu 24.04 container.

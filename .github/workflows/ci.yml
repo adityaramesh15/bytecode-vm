@@ -17,19 +17,13 @@ jobs:
     - name: Install System Toolchain & Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake clang clang-tidy ninja-build libc++-dev libc++abi-dev
+        sudo apt-get install -y cmake clang clang-tidy ninja-build
 
     - name: Configure CMake Build
-      run: |
-        cmake -B build -G Ninja \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      run: cmake --preset ci
 
     - name: Compile Target Binary
-      run: cmake --build build --config Debug --target bytecode_vm vm_tests
+      run: cmake --build --preset ci
 
     - name: Execute Automated Test Engine (with ASan/UBSan)
-      run: |
-        cd build
-        ./vm_tests
+      run: ./build/vm_tests

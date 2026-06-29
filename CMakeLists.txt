@@ -9,10 +9,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Enforce Clang-specific standard library overrides early
+# Apple Clang uses libc++ natively; Linux Clang uses default libstdc++ to avoid
+# Ubuntu packaged libc++/ASan alloc-dealloc-mismatch on exception teardown.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_compile_options(-stdlib=libc++ -fexperimental-library)
-    add_link_options(-stdlib=libc++ -lc++abi)
+    if(APPLE)
+        add_compile_options(-stdlib=libc++ -fexperimental-library)
+        add_link_options(-stdlib=libc++ -lc++abi)
+    endif()
+endif()
+
+# Apply runtime sanitizers globally so FetchContent deps (Catch2) share instrumentation
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    add_compile_options(/fsanitize=address)
+    add_link_options(/fsanitize=address)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
 endif()
 
 # ==========================================
@@ -48,15 +60,6 @@ target_compile_options(vm_compiler_settings INTERFACE
         -Wshadow -Wconversion -Wnon-virtual-dtor
     >
 )
-
-# Apply Runtime Sanitizers (ASan and UBSan)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(vm_compiler_settings INTERFACE /fsanitize=address)
-    target_link_options(vm_compiler_settings INTERFACE /fsanitize=address)
-else()
-    target_compile_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vm_compiler_settings INTERFACE -fsanitize=address,undefined)
-endif()
 
 # ==========================================
 # 4. Primary Targets (Executables & Benchmarks)
