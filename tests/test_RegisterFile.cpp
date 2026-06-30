@@ -35,8 +35,8 @@ TEST_CASE("RegisterFile - out of range gpr read throws", "[RegisterFile]") {
 }
 
 TEST_CASE("VirtualMachine - reset clears ip and sp", "[RegisterFile]") {
-    VirtualMachine vm;
-    vm.reset();
-    REQUIRE(vm.instruction_pointer() == 0);
-    REQUIRE(vm.stack_pointer() == 0);
+    VirtualMachine virtual_machine;
+    virtual_machine.reset();
+    REQUIRE(virtual_machine.instruction_pointer() == 0);
+    REQUIRE(virtual_machine.stack_pointer() == 0);
 }

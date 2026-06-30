@@ -15,7 +15,7 @@ enum class VMError : uint8_t {
     InvalidOperand,
     UnknownLabel,
     UnsupportedOpcode,
-    ProgramEnded
+    StackUnderflow
 };
 
 template <typename T>
@@ -96,6 +96,7 @@ class VirtualMachine {
 
         void reset() noexcept {
             m_cpu.reset();
+            m_stack.clear();
             m_running = false;
         }
 
@@ -109,19 +110,44 @@ class VirtualMachine {
         [[nodiscard]] size_t program_size() const noexcept { return m_program.size(); }
 
     private:
-        RegisterFile m_cpu; 
+        RegisterFile m_cpu;
         bool m_running{false};
 
         std::vector<Instruction> m_program;
         std::unordered_map<std::string_view, size_t> m_labels;
+        std::vector<int64_t> m_stack;
 
-
+        [[nodiscard]] static constexpr bool modifies_ip(Opcode op) noexcept {
+            return op == Opcode::JMP || op == Opcode::CALL || op == Opcode::RET;
+        }
 
         [[nodiscard]] static Instruction make_dest_src_instruction(Opcode opcode, VirtualRegister dest, const Operand& src) {
             Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 2};
             instr.operands[0].value = dest;
             instr.operands[1] = src;
             return instr;
+        }
+
+        [[nodiscard]] static Instruction make_label_instruction(Opcode opcode, std::string_view target) {
+            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 1};
+            instr.operands[0].value = target;
+            return instr;
+        }
+
+        [[nodiscard]] static Instruction make_src_instruction(Opcode opcode, const Operand& src) {
+            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 1};
+            instr.operands[0] = src;
+            return instr;
+        }
+
+        [[nodiscard]] static Instruction make_dest_instruction(Opcode opcode, VirtualRegister dest) {
+            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 1};
+            instr.operands[0].value = dest;
+            return instr;
+        }
+
+        [[nodiscard]] static Instruction make_nullary_instruction(Opcode opcode) {
+            return Instruction{.opcode = opcode, .operands = {}, .operand_count = 0};
         }
 
         [[nodiscard]] VMResult<Instruction> lower_node(const AST::ASTNode& node) const {
@@ -138,15 +164,22 @@ class VirtualMachine {
                 return make_dest_src_instruction(Opcode::SUB, op.dest, op.src);
             }
             if (std::holds_alternative<AST::JmpOp>(node)) {
-                const auto& jmp_op = std::get<AST::JmpOp>(node);
-                Instruction instr{.opcode = Opcode::JMP, .operands = {}, .operand_count = 1};
-                instr.operands[0].value = jmp_op.target;
-                return instr;
+                return make_label_instruction(Opcode::JMP, std::get<AST::JmpOp>(node).target);
+            }
+            if (std::holds_alternative<AST::PushOp>(node)) {
+                return make_src_instruction(Opcode::PUSH, std::get<AST::PushOp>(node).src);
+            }
+            if (std::holds_alternative<AST::PopOp>(node)) {
+                return make_dest_instruction(Opcode::POP, std::get<AST::PopOp>(node).dest);
+            }
+            if (std::holds_alternative<AST::CallOp>(node)) {
+                return make_label_instruction(Opcode::CALL, std::get<AST::CallOp>(node).target);
+            }
+            if (std::holds_alternative<AST::RetOp>(node)) {
+                return make_nullary_instruction(Opcode::RET);
             }
             return std::unexpected(VMError::UnsupportedOpcode);
         }
-
-
 
         [[nodiscard]] VMResult<uint8_t> register_index(VirtualRegister reg) const noexcept {
             if (reg.index >= RegisterFile::GPR_COUNT) {
@@ -186,6 +219,32 @@ class VirtualMachine {
             return std::get<std::string_view>(op.value);
         }
 
+        [[nodiscard]] VMResult<size_t> resolve_label(const Operand& op) const {
+            auto target = label_target(op);
+            if (!target) {
+                return std::unexpected(target.error());
+            }
+            auto it = m_labels.find(*target);
+            if (it == m_labels.end()) {
+                return std::unexpected(VMError::UnknownLabel);
+            }
+            return it->second;
+        }
+
+        void push_stack(int64_t value) {
+            m_stack.push_back(value);
+            m_cpu.sp = m_stack.size();
+        }
+
+        [[nodiscard]] VMResult<int64_t> pop_stack() {
+            if (m_stack.empty()) {
+                return std::unexpected(VMError::StackUnderflow);
+            }
+            int64_t value = m_stack.back();
+            m_stack.pop_back();
+            m_cpu.sp = m_stack.size();
+            return value;
+        }
 
         VMResult<void> step(const Instruction& inst) {
             VMResult<void> step_result = std::unexpected(VMError::UnsupportedOpcode);
@@ -203,6 +262,18 @@ class VirtualMachine {
                 case Opcode::JMP:
                     step_result = exec_jmp(inst);
                     break;
+                case Opcode::PUSH:
+                    step_result = exec_push(inst);
+                    break;
+                case Opcode::POP:
+                    step_result = exec_pop(inst);
+                    break;
+                case Opcode::CALL:
+                    step_result = exec_call(inst);
+                    break;
+                case Opcode::RET:
+                    step_result = exec_ret(inst);
+                    break;
                 default:
                     step_result = std::unexpected(VMError::UnsupportedOpcode);
                     break;
@@ -212,8 +283,8 @@ class VirtualMachine {
                 return step_result;
             }
 
-            if (inst.opcode != Opcode::JMP) {
-                ++m_cpu.ip; 
+            if (!modifies_ip(inst.opcode)) {
+                ++m_cpu.ip;
             }
 
             return {};
@@ -233,7 +304,6 @@ class VirtualMachine {
             return {};
         }
 
-        // passing in lambdas for operation behavior
         VMResult<void> exec_mov(const Instruction& inst) {
             return apply_dest_src(inst, [](int64_t& dest, int64_t src) { dest = src; });
         }
@@ -246,16 +316,53 @@ class VirtualMachine {
             return apply_dest_src(inst, [](int64_t& dest, int64_t src) { dest -= src; });
         }
 
+        VMResult<void> exec_push(const Instruction& inst) {
+            auto src = operand_value(inst.operands[0]);
+            if (!src) {
+                return std::unexpected(src.error());
+            }
+            push_stack(*src);
+            return {};
+        }
+
+        VMResult<void> exec_pop(const Instruction& inst) {
+            auto dest = register_index(inst.operands[0]);
+            if (!dest) {
+                return std::unexpected(dest.error());
+            }
+            auto value = pop_stack();
+            if (!value) {
+                return std::unexpected(value.error());
+            }
+            m_cpu.gpr[*dest] = *value;
+            return {};
+        }
+
         VMResult<void> exec_jmp(const Instruction& inst) {
-            auto target = label_target(inst.operands[0]);
+            auto target = resolve_label(inst.operands[0]);
             if (!target) {
                 return std::unexpected(target.error());
             }
-            auto it = m_labels.find(*target);
-            if (it == m_labels.end()) {
-                return std::unexpected(VMError::UnknownLabel);
+            m_cpu.ip = *target;
+            return {};
+        }
+
+        VMResult<void> exec_call(const Instruction& inst) {
+            auto target = resolve_label(inst.operands[0]);
+            if (!target) {
+                return std::unexpected(target.error());
             }
-            m_cpu.ip = it->second;
+            push_stack(static_cast<int64_t>(m_cpu.ip + 1UZ));
+            m_cpu.ip = *target;
+            return {};
+        }
+
+        VMResult<void> exec_ret(const Instruction& /*inst*/) {
+            auto return_addr = pop_stack();
+            if (!return_addr) {
+                return std::unexpected(return_addr.error());
+            }
+            m_cpu.ip = static_cast<size_t>(*return_addr);
             return {};
         }
 };

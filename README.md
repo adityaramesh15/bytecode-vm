@@ -50,7 +50,7 @@ The system is partitioned into four decoupled core subsystems:
 * [x] ~~**Day 2:** Implement low-level OS page wrappers (`mmap`/`VirtualAlloc`) managing explicit Read/Write/Execute (`RWX`) segment boundaries.~~
 * [x] ~~**Day 3:** Build out the structural switch-dispatch loop covering fundamental instruction sets (`ADD`, `SUB`, `MOV`, `JMP`).~~
 * [x] ~~**Day 4:** Structure a contiguous 16-register layout optimized entirely for internal L1 data cache capacity bounds.~~
-* [ ] **Day 5:** Model physical activation hardware stack routines (`PUSH`, `POP`, `CALL`, `RET`).
+* [x] ~~**Day 5:** Model physical activation hardware stack routines (`PUSH`, `POP`, `CALL`, `RET`).~~
 * [ ] **Day 6-7:** Code the binary assembler bit-packer to emit serialized bytecode files directly into execution hooks.
 
 ### Week 4: Multi-Threading, Concurrency & Managed Runtimes
