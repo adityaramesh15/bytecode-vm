@@ -1,5 +1,6 @@
 #pragma once
 #include "Instruction.hpp"
+#include "VMTypes.hpp"
 #include "AST.hpp"
 #include <array>
 #include <cstddef>
@@ -9,17 +10,6 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
-
-enum class VMError : uint8_t {
-    InvalidRegister,
-    InvalidOperand,
-    UnknownLabel,
-    UnsupportedOpcode,
-    StackUnderflow
-};
-
-template <typename T>
-using VMResult = std::expected<T, VMError>;
 
 
 struct RegisterFile {

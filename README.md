@@ -2,7 +2,7 @@
 
 A high-performance, register-based Virtual Machine, isolated runtime environment, and optimizing compiler built entirely from first principles using modern C++20/23.
 
-This project is engineered to eliminate standard runtime layout inefficiencies by enforcing strict cache locality, eliminating standard OS heap fragmentation, and implementing custom low-level software-defined hardware abstractions. Using this as a learning tool to undertsand compiler construction and modern C++. 
+This project is engineered to eliminate standard runtime layout inefficiencies by enforcing strict cache locality, eliminating standard OS heap fragmentation, and implementing custom low-level software-defined hardware abstractions. Using this as a learning tool to understand compiler construction and modern C++. 
 
 ---
 
