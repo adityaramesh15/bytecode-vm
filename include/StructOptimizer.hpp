@@ -67,11 +67,11 @@ namespace MemoryEngine {
         
             static std::vector<StructMember> optimize_layout(std::vector<StructMember> members) noexcept {
                 std::sort(members.begin(), members.end(), 
-                        [](const StructMember& a, const StructMember& b) noexcept {
-                            if (a.alignment != b.alignment) {
-                                return a.alignment > b.alignment;
+                        [](const StructMember& lhs, const StructMember& rhs) noexcept {
+                            if (lhs.alignment != rhs.alignment) {
+                                return lhs.alignment > rhs.alignment;
                             }
-                            return a.size > b.size; 
+                            return lhs.size > rhs.size; 
                         }
                 );
                 return members;                

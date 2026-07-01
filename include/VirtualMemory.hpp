@@ -69,12 +69,12 @@ namespace MemoryEngine {
                 : m_ram(&physical_ram) {
                 
                 m_ram -> pin();  // claiming pinned memory in Arena
-                for (size_t i = 0; i < 1024UZ; ++i) {
-                    m_directory[i] = nullptr;
-                    m_page_table_ref_counts[i] = 0U;
+                for (size_t dir_idx = 0; dir_idx < 1024UZ; ++dir_idx) {
+                    m_directory[dir_idx] = nullptr;
+                    m_page_table_ref_counts[dir_idx] = 0U;
                 }
-                for (size_t i = 0; i < TLB_SIZE; ++i) {
-                    m_tlb[i] = TLBEntry{};
+                for (size_t tlb_idx = 0; tlb_idx < TLB_SIZE; ++tlb_idx) {
+                    m_tlb[tlb_idx] = TLBEntry{};
                 }
             }
             
@@ -94,8 +94,8 @@ namespace MemoryEngine {
                 if (!m_directory[pdi]) {
                     if (m_table_free_list_size > 0UZ) {
                         m_directory[pdi] = m_table_free_list[--m_table_free_list_size];
-                        for (size_t i = 0; i < 1024UZ; ++i) {
-                            m_directory[pdi]->entries[i].value = 0U;
+                        for (size_t entry_idx = 0; entry_idx < 1024UZ; ++entry_idx) {
+                            m_directory[pdi]->entries[entry_idx].value = 0U;
                         }
                     } else {
                         const size_t space_needed = sizeof(PageTable) + alignof(PageTable);

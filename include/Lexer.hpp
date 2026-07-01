@@ -26,7 +26,7 @@ struct Token {
 
 class Lexer {
     public:
-       constexpr Lexer(std::string_view sv = {}) noexcept : m_str_view(sv), m_line(1), m_column(1) {}
+       constexpr Lexer(std::string_view source_text = {}) noexcept : m_str_view(source_text), m_line(1), m_column(1) {}
        
        // removed noexcept since underlying vector memory allocation for push_back() could throw std::bad_alloc via LinearArena
        template <typename Allocator = std::allocator<Token>> 
@@ -64,15 +64,15 @@ class Lexer {
 
         void skip_whitespace_and_comments() noexcept {
             while (!m_str_view.empty()) {
-                char c = peek();
+                char current_char = peek();
 
-                if (c == ' '  || c == '\t' || c == '\r') {
+                if (current_char == ' '  || current_char == '\t' || current_char == '\r') {
                     advance(1);
-                } else if (c == '\n') {
+                } else if (current_char == '\n') {
                     m_str_view.remove_prefix(1);
                     m_line++;
                     m_column = 1;
-                } else if (c == ';') {
+                } else if (current_char == ';') {
                     while (!m_str_view.empty() && peek() != '\n') {
                         advance(1);
                     }
@@ -90,17 +90,17 @@ class Lexer {
         }
 
         constexpr Token emit_next_token() noexcept {
-            char c = peek();
+            char current_char = peek();
             size_t token_start_line = m_line;
             size_t token_start_col = m_column;
 
-            if (c == ',') {
+            if (current_char == ',') {
                 std::string_view lexeme = m_str_view.substr(0, 1);
                 advance(1);
                 return Token{TokenType::Comma, lexeme, token_start_line, token_start_col};
             } 
 
-            if (std::isdigit(static_cast<unsigned char>(c)) || (c == '-' && std::isdigit(static_cast<unsigned char>(m_str_view.size() > 1 ? m_str_view[1] : '\0')))) {
+            if (std::isdigit(static_cast<unsigned char>(current_char)) || (current_char == '-' && std::isdigit(static_cast<unsigned char>(m_str_view.size() > 1 ? m_str_view[1] : '\0')))) {
                 size_t length = 0;
                 if (peek() == '-') length++;
 
@@ -113,7 +113,7 @@ class Lexer {
                 return Token{TokenType::Immediate, lexeme, token_start_line, token_start_col};
             }
 
-            if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
+            if (std::isalpha(static_cast<unsigned char>(current_char)) || current_char == '_') {
                 size_t length = 0;
                 while (length < m_str_view.size() && (std::isalnum(static_cast<unsigned char>(m_str_view[length])) || m_str_view[length] == '_')) {
                     length++;
@@ -151,8 +151,8 @@ class Lexer {
                 std::string_view num_part = word.substr(1);
                 
                 bool is_valid_digits = true;
-                for (char ch : num_part) {
-                    if (ch < '0' || ch > '9') is_valid_digits = false;
+                for (char digit_char : num_part) {
+                    if (digit_char < '0' || digit_char > '9') is_valid_digits = false;
                 }
                 
                 if (is_valid_digits && !num_part.empty()) {

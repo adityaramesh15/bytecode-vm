@@ -112,17 +112,17 @@ namespace MemoryEngine {
 #if defined(_WIN32)
             [[nodiscard]] constexpr DWORD translate_permissions_win(MemoryPermission perm) noexcept {
                 uint8_t raw_perm = static_cast<uint8_t>(perm);
-                bool r = (raw_perm & static_cast<uint8_t>(MemoryPermission::Read)) != 0;
-                bool w = (raw_perm & static_cast<uint8_t>(MemoryPermission::Write)) != 0;
-                bool x = (raw_perm & static_cast<uint8_t>(MemoryPermission::Exec)) != 0;
+                bool has_read = (raw_perm & static_cast<uint8_t>(MemoryPermission::Read)) != 0;
+                bool has_write = (raw_perm & static_cast<uint8_t>(MemoryPermission::Write)) != 0;
+                bool has_exec = (raw_perm & static_cast<uint8_t>(MemoryPermission::Exec)) != 0;
 
-                if (x) {
-                    if (w) return PAGE_EXECUTE_READWRITE;
-                    if (r) return PAGE_EXECUTE_READ;
+                if (has_exec) {
+                    if (has_write) return PAGE_EXECUTE_READWRITE;
+                    if (has_read) return PAGE_EXECUTE_READ;
                     return PAGE_EXECUTE;
                 } else {
-                    if (w) return PAGE_READWRITE;
-                    if (r) return PAGE_READONLY;
+                    if (has_write) return PAGE_READWRITE;
+                    if (has_read) return PAGE_READONLY;
                     return PAGE_NOACCESS;
                 }
             }

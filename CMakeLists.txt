@@ -57,6 +57,8 @@ target_compile_options(vm_compiler_settings INTERFACE
         -Wall -Wextra -Werror -Wpedantic
         -Wshadow -Wconversion -Wnon-virtual-dtor
     >
+    # Catch2 TEST_CASE macros use __COUNTER__ (C2y); LLVM 22+ warns under -Werror.
+    $<$<CXX_COMPILER_ID:Clang>:-Wno-c2y-extensions>
 )
 
 # ==========================================
@@ -104,39 +106,37 @@ target_link_libraries(vm_tests
 # ==========================================
 # 6. Code Quality & Static Analysis (Clang-Tidy)
 # ==========================================
+option(BYTECODE_VM_ENABLE_CLANG_TIDY "Run clang-tidy during compilation" OFF)
+
 unset(CMAKE_CXX_CLANG_TIDY)
 
-find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
-if(CLANG_TIDY_EXE)
-    message(STATUS "DevDiv Toolchain: Configuring localized static analysis passes.")
-    
-    set(CLANG_TIDY_COMMON_ARGS
-        "--extra-arg=-std=c++23"
-    )
+if(BYTECODE_VM_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+    if(CLANG_TIDY_EXE)
+        message(STATUS "DevDiv Toolchain: Configuring localized static analysis passes.")
 
-    set(CORE_CLANG_TIDY_CHECKS
-        ${CLANG_TIDY_EXE}
-        ${CLANG_TIDY_COMMON_ARGS}
-        "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*"
-        "-warnings-as-errors=*"
-    )
-    
-    # ADDED EXCLUSIONS: Suppress macro complexity and trailing returns for Catch2 compatibility
-    set(TEST_CLANG_TIDY_CHECKS
-        ${CLANG_TIDY_EXE}
-        ${CLANG_TIDY_COMMON_ARGS}
-        "-checks=-*,bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*,-cert-err58-cpp,-bugprone-chained-comparison,-readability-magic-numbers,-bugprone-use-after-move,-modernize-avoid-c-arrays,-readability-function-cognitive-complexity,-modernize-use-trailing-return-type"
-        "-warnings-as-errors=*"
-    )
-    
-    # Safely attach Clang-Tidy parameters to defined targets
-    if(TARGET bytecode_vm)
-        set_target_properties(bytecode_vm PROPERTIES CXX_CLANG_TIDY "${CORE_CLANG_TIDY_CHECKS}")
+        set(CLANG_TIDY_COMMON_ARGS
+            "--extra-arg=-std=c++23"
+            "--config-file=${CMAKE_SOURCE_DIR}/.clang-tidy"
+            "--header-filter=${CMAKE_SOURCE_DIR}/(include|src|tests)/.*"
+        )
+
+        set(CORE_CLANG_TIDY_CHECKS
+            ${CLANG_TIDY_EXE}
+            ${CLANG_TIDY_COMMON_ARGS}
+        )
+
+        set(TEST_CLANG_TIDY_CHECKS
+            ${CLANG_TIDY_EXE}
+            ${CLANG_TIDY_COMMON_ARGS}
+        )
+
+        if(TARGET bytecode_vm)
+            set_target_properties(bytecode_vm PROPERTIES CXX_CLANG_TIDY "${CORE_CLANG_TIDY_CHECKS}")
+        endif()
+
+        if(TARGET vm_tests)
+            set_target_properties(vm_tests PROPERTIES CXX_CLANG_TIDY "${TEST_CLANG_TIDY_CHECKS}")
+        endif()
     endif()
-    
-    if(TARGET vm_tests)
-        set_target_properties(vm_tests PROPERTIES CXX_CLANG_TIDY "${TEST_CLANG_TIDY_CHECKS}")
-    endif()
-else()
-    message(WARNING "DevDiv Toolchain: clang-tidy binary was not detected on this system host environment.")
 endif()

@@ -135,16 +135,16 @@ private:
         }
 
         if (std::holds_alternative<AST::MovOp>(node)) {
-            const auto& op = std::get<AST::MovOp>(node);
-            return byte_size_dest_src(Opcode::MOV, op.dest, op.src);
+            const auto& ast_op = std::get<AST::MovOp>(node);
+            return byte_size_dest_src(Opcode::MOV, ast_op.dest, ast_op.src);
         }
         if (std::holds_alternative<AST::AddOp>(node)) {
-            const auto& op = std::get<AST::AddOp>(node);
-            return byte_size_dest_src(Opcode::ADD, op.dest, op.src);
+            const auto& ast_op = std::get<AST::AddOp>(node);
+            return byte_size_dest_src(Opcode::ADD, ast_op.dest, ast_op.src);
         }
         if (std::holds_alternative<AST::SubOp>(node)) {
-            const auto& op = std::get<AST::SubOp>(node);
-            return byte_size_dest_src(Opcode::SUB, op.dest, op.src);
+            const auto& ast_op = std::get<AST::SubOp>(node);
+            return byte_size_dest_src(Opcode::SUB, ast_op.dest, ast_op.src);
         }
         if (std::holds_alternative<AST::PushOp>(node)) {
             return byte_size_push(std::get<AST::PushOp>(node).src);
@@ -204,26 +204,26 @@ private:
             return {};
         }
         if (std::holds_alternative<AST::MovOp>(node)) {
-            const auto& op = std::get<AST::MovOp>(node);
-            return emit_dest_src(Opcode::MOV, op.dest, op.src, out);
+            const auto& ast_op = std::get<AST::MovOp>(node);
+            return emit_dest_src(Opcode::MOV, ast_op.dest, ast_op.src, out);
         }
         if (std::holds_alternative<AST::AddOp>(node)) {
-            const auto& op = std::get<AST::AddOp>(node);
-            return emit_dest_src(Opcode::ADD, op.dest, op.src, out);
+            const auto& ast_op = std::get<AST::AddOp>(node);
+            return emit_dest_src(Opcode::ADD, ast_op.dest, ast_op.src, out);
         }
         if (std::holds_alternative<AST::SubOp>(node)) {
-            const auto& op = std::get<AST::SubOp>(node);
-            return emit_dest_src(Opcode::SUB, op.dest, op.src, out);
+            const auto& ast_op = std::get<AST::SubOp>(node);
+            return emit_dest_src(Opcode::SUB, ast_op.dest, ast_op.src, out);
         }
         if (std::holds_alternative<AST::PushOp>(node)) {
             return emit_push(std::get<AST::PushOp>(node).src, out);
         }
         if (std::holds_alternative<AST::PopOp>(node)) {
-            const auto& op = std::get<AST::PopOp>(node);
-            if (const auto valid = validate_gpr(op.dest.index); !valid) {
+            const auto& ast_op = std::get<AST::PopOp>(node);
+            if (const auto valid = validate_gpr(ast_op.dest.index); !valid) {
                 return valid;
             }
-            append_u32(out, Bytecode::header_unary_reg(Opcode::POP, op.dest.index));
+            append_u32(out, Bytecode::header_unary_reg(Opcode::POP, ast_op.dest.index));
             return {};
         }
         if (std::holds_alternative<AST::JmpOp>(node)) {
@@ -306,10 +306,10 @@ private:
         const LabelOffsetTable& labels,
         std::string_view name)
     {
-        const auto it = labels.find(name);
-        if (it == labels.end()) {
+        const auto label_entry = labels.find(name);
+        if (label_entry == labels.end()) {
             return std::unexpected(VMError::UnknownLabel);
         }
-        return it->second;
+        return label_entry->second;
     }
 };

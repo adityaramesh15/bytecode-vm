@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "VirtualMachine.hpp"
+#include "LinearArena.hpp"
+#include "VirtualMemory.hpp"
 
 TEST_CASE("RegisterFile - layout fits L1 cache footprint", "[RegisterFile]") {
     static_assert(alignof(RegisterFile) >= 64);
@@ -23,9 +25,9 @@ TEST_CASE("RegisterFile - reset clears gpr ip and sp", "[RegisterFile]") {
 
 TEST_CASE("RegisterFile - all 16 gpr slots are addressable", "[RegisterFile]") {
     RegisterFile cpu{};
-    for (uint8_t i = 0; i < RegisterFile::GPR_COUNT; ++i) {
-        cpu.gpr[i] = static_cast<int64_t>(i) * 10;
-        REQUIRE(cpu.read_gpr(i) == static_cast<int64_t>(i) * 10);
+    for (uint8_t reg_idx = 0; reg_idx < RegisterFile::GPR_COUNT; ++reg_idx) {
+        cpu.gpr[reg_idx] = static_cast<int64_t>(reg_idx) * 10;
+        REQUIRE(cpu.read_gpr(reg_idx) == static_cast<int64_t>(reg_idx) * 10);
     }
 }
 
@@ -35,7 +37,9 @@ TEST_CASE("RegisterFile - out of range gpr read throws", "[RegisterFile]") {
 }
 
 TEST_CASE("VirtualMachine - reset clears ip and sp", "[RegisterFile]") {
-    VirtualMachine virtual_machine;
+    MemoryEngine::LinearArena arena{1024UZ * 64UZ};
+    MemoryEngine::MemoryManagementUnit mmu{arena};
+    VirtualMachine virtual_machine{mmu, arena};
     virtual_machine.reset();
     REQUIRE(virtual_machine.instruction_pointer() == 0);
     REQUIRE(virtual_machine.stack_pointer() == 0);

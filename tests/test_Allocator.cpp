@@ -29,7 +29,7 @@ TEST_CASE("Arena Allocator - Standard Vector Integration Pass", "[Memory]") {
         size_t baseline_memory = arena.bytes_used();
 
         // 5. Trigger a vector capacity expansion pass
-        for (int i = 0; i < 20; ++i) {
+        for (int elem_idx = 0; elem_idx < 20; ++elem_idx) {
             token_stream.push_back(Token{TokenType::Immediate, "42", 2UZ, 5UZ});
         }
 

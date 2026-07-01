@@ -1,87 +1,122 @@
 #include <iostream>
-#include <variant>
+#include <string_view>
 #include <vector>
 #include "Lexer.hpp"
 #include "AST.hpp"
 #include "Parser.hpp"
 #include "LinearArena.hpp"
 #include "ArenaAllocator.hpp"
+#include "BytecodeEmitter.hpp"
+#include "BytecodeFile.hpp"
+#include "VirtualMachine.hpp"
+#include "VirtualMemory.hpp"
 
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; }; 
+namespace {
 
-template <typename Allocator>
-void inspect_ast(const std::vector<AST::ASTNode, Allocator>& program_ast) {
-    std::cout << "Successfully compiled " << program_ast.size() << " AST nodes.\n";
-
-    for (size_t i = 0; i < program_ast.size(); ++i) {
-        std::cout << "Node [" << i << "]: ";
-
-        std::visit(overloaded {
-            [](const AST::LabelDecl& node) { std::cout << "Label Declaration -> Name: " << node.name << "\n"; },
-            [](const AST::MovOp& node)     { std::cout << "Instruction -> MOV (Dest: R" << static_cast<int>(node.dest.index) << ")\n"; },
-            [](const AST::AddOp& node)     { std::cout << "Instruction -> ADD (Dest: R" << static_cast<int>(node.dest.index) << ")\n"; },
-            [](const AST::SubOp& node)     { std::cout << "Instruction -> SUB (Dest: R" << static_cast<int>(node.dest.index) << ")\n"; },
-            [](const AST::PushOp&)         { std::cout << "Instruction -> PUSH\n"; },
-            [](const AST::PopOp& node)     { std::cout << "Instruction -> POP (Dest: R" << static_cast<int>(node.dest.index) << ")\n"; },
-            [](const AST::CallOp& node)    { std::cout << "Instruction -> CALL -> Target: " << node.target << "\n"; },
-            [](const AST::JmpOp& node)     { std::cout << "Instruction -> JMP -> Target: " << node.target << "\n"; },
-            [](const AST::RetOp&)          { std::cout << "Instruction -> RET\n"; }
-        }, program_ast[i]);
+void print_vm_error(VMError err) {
+    switch (err) {
+        case VMError::InvalidRegister:    std::cerr << "InvalidRegister\n"; break;
+        case VMError::InvalidOperand:     std::cerr << "InvalidOperand\n"; break;
+        case VMError::UnknownLabel:       std::cerr << "UnknownLabel\n"; break;
+        case VMError::UnsupportedOpcode:  std::cerr << "UnsupportedOpcode\n"; break;
+        case VMError::StackUnderflow:     std::cerr << "StackUnderflow\n"; break;
+        case VMError::InvalidBytecode:    std::cerr << "InvalidBytecode\n"; break;
+        default:                          std::cerr << "Unknown VM error\n"; break;
     }
+}
 
 }
 
 auto main() -> int {
     try {
-        constexpr std::string_view source_code = 
-            "main:\n"
-            "    MOV R1, 42\n"
-            "    ADD R2, R1\n"
-            "    PUSH R2\n"
-            "    CALL print_val\n"
-            "    RET";
+        constexpr std::string_view source_code =
+            "MOV R1, 42\n"
+            "ADD R2, R1\n"
+            "PUSH R2\n"
+            "CALL add_one\n"
+            "POP R3\n"
+            "JMP done\n"
+            "add_one:\n"
+            "ADD R2, R1\n"
+            "RET\n"
+            "done:\n"
+            "MOV R0, 0\n";
 
-        std::cout << "Memory Engine Initializing (64MB Linear Region Allocation)...\n";
-        constexpr size_t ONE_KIB = 1024UZ;
-        constexpr size_t ONE_MIB = ONE_KIB * ONE_KIB;
-        constexpr size_t ARENA_SIZE_MIB = 64UZ;
-        constexpr size_t TOTAL_ARENA_CAPACITY = ARENA_SIZE_MIB * ONE_MIB;
+        std::cout << "Memory Engine Initializing (64MB Linear Region)...\n";
+        constexpr size_t TOTAL_ARENA_CAPACITY = 64UZ * 1024UZ * 1024UZ;
 
         MemoryEngine::LinearArena arena(TOTAL_ARENA_CAPACITY);
+        MemoryEngine::MemoryManagementUnit mmu(arena);
 
         MemoryEngine::ArenaAllocator<Token> token_allocator(arena);
         MemoryEngine::ArenaAllocator<AST::ASTNode> ast_allocator(arena);
 
-        std::cout << "Frontend Engine Initializing...\n";
-        std::cout << "Ingesting raw assembly\n";
-
+        // --- Frontend: assembly -> AST ---
+        std::cout << "Frontend: lex + parse...\n";
         Lexer lexer(source_code);
-        std::vector<Token, MemoryEngine::ArenaAllocator<Token>> tokens = lexer.lex_input(token_allocator);
-        std::cout << "    -> Memory consumption post-lex pass: " << arena.bytes_used() << " bytes.\n";
+        auto tokens = lexer.lex_input(token_allocator);
 
         Parser<MemoryEngine::ArenaAllocator<Token>> parser(std::move(tokens), arena);
-        auto result = parser.parse_program(ast_allocator);
-        std::cout << "    -> Memory consumption post-parse pass: " << arena.bytes_used() << " bytes.\n";
+        auto parse_result = parser.parse_program(ast_allocator);
+        if (!parse_result) {
+            const SyntaxError& err = parse_result.error();
+            std::cerr << "Compilation error: " << err.message
+                      << " (line " << err.line << ", col " << err.column << ")\n";
+            return 1;
+        }
+        const auto& program_ast = *parse_result;
+        std::cout << "  -> Parsed " << program_ast.size() << " AST nodes\n";
 
-        if (!result.has_value()) {
-            const SyntaxError& err = result.error();
-            std::cerr << "INTEGRATION FAILURE: Compilation Error Detected!\n"
-                      << "Message: " << err.message << "\n"
-                      << "Coordinates: Line " << err.line << ", Column " << err.column << "\n";
+        // --- Compiler backend: AST -> bytecode ---
+        std::cout << "Backend: emit bytecode...\n";
+        BytecodeEmitter emitter;
+        auto emit_result = emitter.emit(std::span{program_ast.data(), program_ast.size()});
+        if (!emit_result) {
+            std::cerr << "Emit failed: ";
+            print_vm_error(emit_result.error());
+            return 1;
+        }
+        std::cout << "  -> Emitted " << emit_result->code.size() << " bytes\n";
+
+        // --- Persist .bcmv artifact ---
+        constexpr const char* kBytecodePath = "program.bcmv";
+        if (auto write_status = Bytecode::write_file(kBytecodePath, emit_result->code); !write_status) {
+            std::cerr << "Failed to write " << kBytecodePath << "\n";
+            return 1;
+        }
+        std::cout << "  -> Wrote " << kBytecodePath << "\n";
+
+        // --- Runtime: load into guest MMU memory and execute ---
+        std::cout << "Runtime: load + execute...\n";
+        VirtualMachine virtual_machine(mmu, arena);
+
+        if (auto load_status = virtual_machine.load_program_from_file(kBytecodePath); !load_status) {
+            std::cerr << "Load failed: ";
+            print_vm_error(load_status.error());
             return 1;
         }
 
-        const auto& program_ast = result.value();
-        inspect_ast(program_ast);
+        if (auto run_status = virtual_machine.run(); !run_status) {
+            std::cerr << "Execution failed: ";
+            print_vm_error(run_status.error());
+            return 1;
+        }
 
-        std::cout << "\nFrontend Verification Complete. Zero Leaks. All Constraints Valid.\n";
+        // --- Results ---
+        std::cout << "\nExecution complete.\n";
+        std::cout << "  R1 = " << virtual_machine.read_register(1) << "\n";
+        std::cout << "  R2 = " << virtual_machine.read_register(2) << "\n";
+        std::cout << "  R3 = " << virtual_machine.read_register(3) << "\n";
+        std::cout << "  Final IP = " << virtual_machine.instruction_pointer() << "\n";
+        std::cout << "  Program size = " << virtual_machine.program_size() << " bytes\n";
+
         return 0;
 
     } catch (const std::exception& exception) {
-        std::cerr << "Fatal exception leaked to runtime boundary: " << exception.what() << "\n";
+        std::cerr << "Fatal exception: " << exception.what() << "\n";
         return 1;
     } catch (...) {
-        std::cerr << "Fatal unknown exception leaked to runtime boundary.\n";
+        std::cerr << "Fatal unknown exception.\n";
         return 1;
     }
 }

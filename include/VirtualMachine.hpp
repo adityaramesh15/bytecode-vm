@@ -1,14 +1,15 @@
 #pragma once
 #include "Instruction.hpp"
 #include "VMTypes.hpp"
-#include "AST.hpp"
+#include "BytecodeFormat.hpp"
+#include "BytecodeFile.hpp"
+#include "VirtualMemory.hpp"
+#include "LinearArena.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <span>
-#include <unordered_map>
-#include <variant>
 #include <vector>
 
 
@@ -36,32 +37,45 @@ static_assert(sizeof(RegisterFile) <= 256);
 
 class VirtualMachine {
     public:
-        VirtualMachine() = default;
+        explicit VirtualMachine(MemoryEngine::MemoryManagementUnit& mmu, MemoryEngine::LinearArena& arena) noexcept
+                                : m_mmu(&mmu), m_arena_base(static_cast<std::byte*>(arena.current_allocations().data())){}
 
-        VMResult<void> load_program(std::span<const AST::ASTNode> ast) {
-            m_program.clear();
-            m_labels.clear();
-            reset();
-
-            for (const AST::ASTNode& node : ast) {
-                if (std::holds_alternative<AST::LabelDecl>(node)) {
-                    const auto& label = std::get<AST::LabelDecl>(node);
-                    m_labels[label.name] = m_program.size();
-                    continue;
-                }
-
-                auto lowered = lower_node(node);
-                if (!lowered) {
-                    return std::unexpected(lowered.error());
-                }
-                m_program.push_back(*lowered);
+        VMResult<void> load_program(std::span<const std::byte> code) {
+            if (code.empty()) {
+                m_code_size = 0;
+                reset();
+                return {};
             }
 
-            return {};
+            size_t offset = 0;
+            while (offset < code.size()) {
+                Bytecode::DecodedInstruction decoded{};
+                if (!Bytecode::decode_at(code.data(), offset, code.size(), decoded)) {
+                    return std::unexpected(VMError::InvalidBytecode); 
+                }
+                offset += decoded.size_bytes;
+            }
+            if (!validate_branch_targets(code)) {
+                return std::unexpected(VMError::InvalidBytecode);
+            }
+
+            auto loaded = load_into_guest_memory(code);
+            if (!loaded) return loaded;
+
+            reset();
+            return {}; 
+        }
+
+        VMResult<void> load_program_from_file(const char* path) {
+            auto code = Bytecode::read_file(path);
+            if (!code) {
+                return std::unexpected(code.error());
+            }
+            return load_program(std::span<const std::byte>{*code});
         }
 
         VMResult<void> run() {
-            if (m_program.empty()) {
+            if (m_code_size == 0) {
                 return {};
             }
 
@@ -69,12 +83,18 @@ class VirtualMachine {
             m_cpu.ip = 0UZ;
 
             while (m_running) {
-                if (m_cpu.ip >= m_program.size()) {
+                if (m_cpu.ip >= m_code_size) {
                     m_running = false;
                     break;
                 }
 
-                auto result = step(m_program[m_cpu.ip]);
+                auto decoded = fetch_instruction(m_cpu.ip);
+                if (!decoded) {
+                    m_running = false;
+                    return std::unexpected(decoded.error());
+                }
+
+                auto result = step(*decoded);
                 if (!result) {
                     m_running = false;
                     return result;
@@ -97,129 +117,89 @@ class VirtualMachine {
         [[nodiscard]] size_t instruction_pointer() const noexcept { return m_cpu.ip; }
         [[nodiscard]] size_t stack_pointer() const noexcept { return m_cpu.sp; }
         [[nodiscard]] bool is_running() const noexcept { return m_running; }
-        [[nodiscard]] size_t program_size() const noexcept { return m_program.size(); }
+        [[nodiscard]] size_t program_size() const noexcept { return m_code_size; }
 
     private:
         RegisterFile m_cpu;
         bool m_running{false};
 
-        std::vector<Instruction> m_program;
-        std::unordered_map<std::string_view, size_t> m_labels;
         std::vector<int64_t> m_stack;
 
-        [[nodiscard]] static constexpr bool modifies_ip(Opcode op) noexcept {
-            return op == Opcode::JMP || op == Opcode::CALL || op == Opcode::RET;
-        }
+        static constexpr uint32_t CODE_BASE_VA = 0x00400000U;
+        MemoryEngine::MemoryManagementUnit* m_mmu{nullptr};
+        std::byte* m_arena_base{nullptr};
+        size_t m_code_size{0};
 
-        [[nodiscard]] static Instruction make_dest_src_instruction(Opcode opcode, VirtualRegister dest, const Operand& src) {
-            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 2};
-            instr.operands[0].value = dest;
-            instr.operands[1] = src;
-            return instr;
-        }
 
-        [[nodiscard]] static Instruction make_label_instruction(Opcode opcode, std::string_view target) {
-            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 1};
-            instr.operands[0].value = target;
-            return instr;
-        }
 
-        [[nodiscard]] static Instruction make_src_instruction(Opcode opcode, const Operand& src) {
-            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 1};
-            instr.operands[0] = src;
-            return instr;
-        }
+        [[nodiscard]] static constexpr bool modifies_ip(Opcode opcode) noexcept {
+            return opcode == Opcode::JMP || opcode == Opcode::CALL || opcode == Opcode::RET;
+        }     
 
-        [[nodiscard]] static Instruction make_dest_instruction(Opcode opcode, VirtualRegister dest) {
-            Instruction instr{.opcode = opcode, .operands = {}, .operand_count = 1};
-            instr.operands[0].value = dest;
-            return instr;
-        }
 
-        [[nodiscard]] static Instruction make_nullary_instruction(Opcode opcode) {
-            return Instruction{.opcode = opcode, .operands = {}, .operand_count = 0};
-        }
 
-        [[nodiscard]] VMResult<Instruction> lower_node(const AST::ASTNode& node) const {
-            if (std::holds_alternative<AST::MovOp>(node)) {
-                const auto& op = std::get<AST::MovOp>(node);
-                return make_dest_src_instruction(Opcode::MOV, op.dest, op.src);
-            }
-            if (std::holds_alternative<AST::AddOp>(node)) {
-                const auto& op = std::get<AST::AddOp>(node);
-                return make_dest_src_instruction(Opcode::ADD, op.dest, op.src);
-            }
-            if (std::holds_alternative<AST::SubOp>(node)) {
-                const auto& op = std::get<AST::SubOp>(node);
-                return make_dest_src_instruction(Opcode::SUB, op.dest, op.src);
-            }
-            if (std::holds_alternative<AST::JmpOp>(node)) {
-                return make_label_instruction(Opcode::JMP, std::get<AST::JmpOp>(node).target);
-            }
-            if (std::holds_alternative<AST::PushOp>(node)) {
-                return make_src_instruction(Opcode::PUSH, std::get<AST::PushOp>(node).src);
-            }
-            if (std::holds_alternative<AST::PopOp>(node)) {
-                return make_dest_instruction(Opcode::POP, std::get<AST::PopOp>(node).dest);
-            }
-            if (std::holds_alternative<AST::CallOp>(node)) {
-                return make_label_instruction(Opcode::CALL, std::get<AST::CallOp>(node).target);
-            }
-            if (std::holds_alternative<AST::RetOp>(node)) {
-                return make_nullary_instruction(Opcode::RET);
-            }
-            return std::unexpected(VMError::UnsupportedOpcode);
-        }
-
-        [[nodiscard]] VMResult<uint8_t> register_index(VirtualRegister reg) const noexcept {
-            if (reg.index >= RegisterFile::GPR_COUNT) {
+        [[nodiscard]] VMResult<uint8_t> validate_reg(uint8_t index) const noexcept {
+            if (index >= RegisterFile::GPR_COUNT || index == Bytecode::UNUSED_REG) {
                 return std::unexpected(VMError::InvalidRegister);
             }
-            return reg.index;
+            
+            return index;
         }
 
-        [[nodiscard]] VMResult<uint8_t> register_index(const Operand& op) const noexcept {
-            if (!std::holds_alternative<VirtualRegister>(op.value)) {
-                return std::unexpected(VMError::InvalidOperand);
-            }
-            return register_index(std::get<VirtualRegister>(op.value));
-        }
-
-        [[nodiscard]] VMResult<int64_t> operand_value(const Operand& op) const {
-            return std::visit([this](const auto& value) -> VMResult<int64_t> {
-                using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, VirtualRegister>) {
-                    auto idx = register_index(value);
-                    if (!idx) {
-                        return std::unexpected(idx.error());
-                    }
-                    return m_cpu.read_gpr(*idx);
-                } else if constexpr (std::is_same_v<T, int64_t>) {
-                    return value;
-                } else {
-                    return std::unexpected(VMError::InvalidOperand);
+        [[nodiscard]] VMResult<void> validate_branch_targets(std::span<const std::byte> code) const {
+            size_t offset = 0;
+            while (offset < code.size()) {
+                Bytecode::DecodedInstruction decoded{};
+                if (!Bytecode::decode_at(code.data(), offset, code.size(), decoded)){
+                    return std::unexpected(VMError::InvalidBytecode); 
                 }
-            }, op.value);
+
+                if (decoded.opcode == Opcode::JMP || decoded.opcode == Opcode::CALL) {
+                    const size_t target = static_cast<size_t>(decoded.ext0);
+                    if (target >= code.size()) {
+                        return std::unexpected(VMError::InvalidBytecode);
+                    }
+
+                    Bytecode::DecodedInstruction at_target{}; 
+                    if (!Bytecode::decode_at(code.data(), target, code.size(), at_target)) {
+                        return std::unexpected(VMError::InvalidBytecode);
+                    }
+                }
+
+                offset += decoded.size_bytes;
+            }
+            return {}; 
         }
 
-        [[nodiscard]] VMResult<std::string_view> label_target(const Operand& op) const noexcept {
-            if (!std::holds_alternative<std::string_view>(op.value)) {
-                return std::unexpected(VMError::InvalidOperand);
+
+
+        [[nodiscard]] VMResult<int64_t> read_source_operand(const Bytecode::DecodedInstruction& inst) const {
+            if (inst.op1_kind == Bytecode::OperandKind::Register) {
+                auto idx = validate_reg(inst.reg_b);
+                if (!idx) return std::unexpected(idx.error());
+                return m_cpu.read_gpr(*idx);
             }
-            return std::get<std::string_view>(op.value);
+            if (inst.op1_kind == Bytecode::OperandKind::Immediate) {
+                return inst.ext1;
+            }
+            return std::unexpected(VMError::InvalidOperand);
         }
 
-        [[nodiscard]] VMResult<size_t> resolve_label(const Operand& op) const {
-            auto target = label_target(op);
-            if (!target) {
-                return std::unexpected(target.error());
+        [[nodiscard]] VMResult<int64_t> read_push_operand(
+            const Bytecode::DecodedInstruction& inst) const
+        {
+            if (inst.op0_kind == Bytecode::OperandKind::Register) {
+                auto idx = validate_reg(inst.reg_a);
+                if (!idx) return std::unexpected(idx.error());
+                return m_cpu.read_gpr(*idx);
             }
-            auto it = m_labels.find(*target);
-            if (it == m_labels.end()) {
-                return std::unexpected(VMError::UnknownLabel);
+            if (inst.op0_kind == Bytecode::OperandKind::Immediate) {
+                return inst.ext0;
             }
-            return it->second;
+            return std::unexpected(VMError::InvalidOperand);
         }
+
+
 
         void push_stack(int64_t value) {
             m_stack.push_back(value);
@@ -236,9 +216,99 @@ class VirtualMachine {
             return value;
         }
 
-        VMResult<void> step(const Instruction& inst) {
-            VMResult<void> step_result = std::unexpected(VMError::UnsupportedOpcode);
 
+        [[nodiscard]] VMResult<std::byte> read_guest_byte(size_t code_offset) const {
+            const uint32_t virt_addr = CODE_BASE_VA + static_cast<uint32_t>(code_offset);
+            const auto phys = m_mmu->translate(virt_addr, false);
+            if (!phys) {
+                return std::unexpected(VMError::InvalidBytecode);
+            }
+            return m_arena_base[*phys];
+        }
+
+        [[nodiscard]] VMResult<void> write_guest_byte(size_t code_offset, std::byte value) {
+            const uint32_t virt_addr = CODE_BASE_VA + static_cast<uint32_t>(code_offset);
+            const auto phys = m_mmu->translate(virt_addr, true);  // require write during load
+            if (!phys) {
+                return std::unexpected(VMError::InvalidBytecode);
+            }
+            m_arena_base[*phys] = value;
+            return {};
+        }
+
+        [[nodiscard]] VMResult<Bytecode::DecodedInstruction> fetch_instruction(size_t code_offset) const {
+            if (code_offset >= m_code_size) {
+                return std::unexpected(VMError::InvalidBytecode);
+            }
+            
+            // the max instruction size is 8 bytes (header + one ext word), no wide types yet for ext
+            std::byte local_buf[8];
+            const size_t remaining = m_code_size - code_offset;
+            const size_t window = remaining < sizeof(local_buf) ? remaining : sizeof(local_buf);
+            for (size_t byte_idx = 0; byte_idx < window; ++byte_idx) {
+                auto byte = read_guest_byte(code_offset + byte_idx);
+                if (!byte) {
+                    return std::unexpected(byte.error());
+                }
+                local_buf[byte_idx] = *byte;
+            }
+            Bytecode::DecodedInstruction decoded{};
+            if (!Bytecode::decode_at(local_buf, 0UZ, window, decoded)) {
+                return std::unexpected(VMError::InvalidBytecode);
+            }
+
+            if (code_offset + decoded.size_bytes > m_code_size) {
+                return std::unexpected(VMError::InvalidBytecode);
+            }
+
+            return decoded;
+        }
+
+        [[nodiscard]] VMResult<void> map_code_page(uint32_t page_va, bool readable, bool writable) {
+            const auto status = m_mmu->map_page(page_va, readable, writable);
+            if (!status) return std::unexpected(VMError::InvalidBytecode);
+            return {};
+        }
+
+        
+        [[nodiscard]] VMResult<void> load_into_guest_memory(std::span<const std::byte> code) {
+            const uint32_t page_size = MemoryEngine::MemoryManagementUnit::PAGE_SIZE;
+            const size_t page_count =
+                (code.size() + page_size - 1UZ) / page_size;
+            
+            // map all code pages RW
+            for (size_t page = 0; page < page_count; ++page) {
+                const uint32_t page_va = CODE_BASE_VA + static_cast<uint32_t>(page * page_size);
+                if (auto status = map_code_page(page_va, true, true); !status) {
+                    return status;
+                }
+            }
+            
+            // write bytecode
+            for (size_t byte_idx = 0; byte_idx < code.size(); ++byte_idx) {
+                if (auto status = write_guest_byte(byte_idx, code[byte_idx]); !status) {
+                    return status;
+                }
+            }
+            
+            // W^X — flip to RX (readable, not writable)
+            for (size_t page = 0; page < page_count; ++page) {
+                const uint32_t page_va =
+                    CODE_BASE_VA + static_cast<uint32_t>(page * page_size);
+                if (auto status = map_code_page(page_va, true, false); !status) {
+                    return status;
+                }
+            }
+            
+            m_code_size = code.size();
+            return {};
+        }
+
+
+
+
+        VMResult<void> step(const Bytecode::DecodedInstruction& inst) {
+            VMResult<void> step_result = std::unexpected(VMError::UnsupportedOpcode);
             switch (inst.opcode) {
                 case Opcode::MOV:
                     step_result = exec_mov(inst);
@@ -269,89 +339,68 @@ class VirtualMachine {
                     break;
             }
 
-            if (!step_result) {
-                return step_result;
-            }
-
-            if (!modifies_ip(inst.opcode)) {
-                ++m_cpu.ip;
-            }
+            if (!step_result) return step_result;
+            if (!modifies_ip(inst.opcode)) m_cpu.ip += inst.size_bytes; 
 
             return {};
         }
 
         template <typename ApplyFn>
-        VMResult<void> apply_dest_src(const Instruction& inst, ApplyFn&& apply) {
-            auto dest = register_index(inst.operands[0]);
-            if (!dest) {
-                return std::unexpected(dest.error());
-            }
-            auto src = operand_value(inst.operands[1]);
-            if (!src) {
-                return std::unexpected(src.error());
-            }
+        VMResult<void> apply_dest_src(const Bytecode::DecodedInstruction& inst, ApplyFn&& apply) {
+            auto dest = validate_reg(inst.reg_a); 
+            if (!dest) return std::unexpected(dest.error());
+    
+            auto src = read_source_operand(inst);
+            if (!src) return std::unexpected(src.error());
+            
             apply(m_cpu.gpr[*dest], *src);
             return {};
         }
 
-        VMResult<void> exec_mov(const Instruction& inst) {
+        VMResult<void> exec_mov(const Bytecode::DecodedInstruction& inst) {
             return apply_dest_src(inst, [](int64_t& dest, int64_t src) { dest = src; });
         }
 
-        VMResult<void> exec_add(const Instruction& inst) {
+        VMResult<void> exec_add(const Bytecode::DecodedInstruction& inst) {
             return apply_dest_src(inst, [](int64_t& dest, int64_t src) { dest += src; });
         }
 
-        VMResult<void> exec_sub(const Instruction& inst) {
+        VMResult<void> exec_sub(const Bytecode::DecodedInstruction& inst) {
             return apply_dest_src(inst, [](int64_t& dest, int64_t src) { dest -= src; });
         }
 
-        VMResult<void> exec_push(const Instruction& inst) {
-            auto src = operand_value(inst.operands[0]);
-            if (!src) {
-                return std::unexpected(src.error());
-            }
-            push_stack(*src);
+        VMResult<void> exec_push(const Bytecode::DecodedInstruction& inst) {
+            auto value = read_push_operand(inst);
+            if (!value) return std::unexpected(value.error());
+            push_stack(*value);
             return {};
         }
 
-        VMResult<void> exec_pop(const Instruction& inst) {
-            auto dest = register_index(inst.operands[0]);
-            if (!dest) {
-                return std::unexpected(dest.error());
-            }
+        VMResult<void> exec_pop(const Bytecode::DecodedInstruction& inst) {
+            auto dest = validate_reg(inst.reg_a);
+            if (!dest) return std::unexpected(dest.error());
+            
             auto value = pop_stack();
-            if (!value) {
-                return std::unexpected(value.error());
-            }
+            if (!value) return std::unexpected(value.error());
             m_cpu.gpr[*dest] = *value;
             return {};
         }
 
-        VMResult<void> exec_jmp(const Instruction& inst) {
-            auto target = resolve_label(inst.operands[0]);
-            if (!target) {
-                return std::unexpected(target.error());
-            }
-            m_cpu.ip = *target;
+        VMResult<void> exec_jmp(const Bytecode::DecodedInstruction& inst) {
+            m_cpu.ip = static_cast<size_t>(inst.ext0);
             return {};
         }
 
-        VMResult<void> exec_call(const Instruction& inst) {
-            auto target = resolve_label(inst.operands[0]);
-            if (!target) {
-                return std::unexpected(target.error());
-            }
-            push_stack(static_cast<int64_t>(m_cpu.ip + 1UZ));
-            m_cpu.ip = *target;
+        VMResult<void> exec_call(const Bytecode::DecodedInstruction& inst) {
+            const size_t return_ip = m_cpu.ip + inst.size_bytes;
+            push_stack(static_cast<int64_t>(return_ip));
+            m_cpu.ip = static_cast<size_t>(inst.ext0);
             return {};
         }
 
-        VMResult<void> exec_ret(const Instruction& /*inst*/) {
+        VMResult<void> exec_ret(const Bytecode::DecodedInstruction& /*inst*/) {
             auto return_addr = pop_stack();
-            if (!return_addr) {
-                return std::unexpected(return_addr.error());
-            }
+            if (!return_addr) return std::unexpected(return_addr.error());
             m_cpu.ip = static_cast<size_t>(*return_addr);
             return {};
         }

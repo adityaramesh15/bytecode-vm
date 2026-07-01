@@ -1,6 +1,5 @@
 #pragma once
 #include "Instruction.hpp"
-#include <climits>
 #include <cstddef>
 #include <cstdint>
 
@@ -126,19 +125,17 @@ struct DecodedInstruction {
 }
 
 [[nodiscard]] constexpr uint32_t read_u32_le(const std::byte* ptr) noexcept {
-    const auto* bytes = reinterpret_cast<const unsigned char*>(ptr);
-    return static_cast<uint32_t>(bytes[0])
-         | (static_cast<uint32_t>(bytes[1]) << 8U)
-         | (static_cast<uint32_t>(bytes[2]) << 16U)
-         | (static_cast<uint32_t>(bytes[3]) << 24U);
+    return static_cast<uint32_t>(ptr[0])
+         | (static_cast<uint32_t>(ptr[1]) << 8U)
+         | (static_cast<uint32_t>(ptr[2]) << 16U)
+         | (static_cast<uint32_t>(ptr[3]) << 24U);
 }
 
 constexpr void write_u32_le(std::byte* ptr, uint32_t value) noexcept {
-    auto* bytes = reinterpret_cast<unsigned char*>(ptr);
-    bytes[0] = static_cast<unsigned char>(value & 0xFFU);
-    bytes[1] = static_cast<unsigned char>((value >> 8U) & 0xFFU);
-    bytes[2] = static_cast<unsigned char>((value >> 16U) & 0xFFU);
-    bytes[3] = static_cast<unsigned char>((value >> 24U) & 0xFFU);
+    ptr[0] = static_cast<std::byte>(value & 0xFFU);
+    ptr[1] = static_cast<std::byte>((value >> 8U) & 0xFFU);
+    ptr[2] = static_cast<std::byte>((value >> 16U) & 0xFFU);
+    ptr[3] = static_cast<std::byte>((value >> 24U) & 0xFFU);
 }
 
 [[nodiscard]] constexpr bool decode_at(

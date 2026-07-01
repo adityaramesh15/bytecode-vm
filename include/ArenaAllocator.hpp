@@ -32,8 +32,8 @@ namespace MemoryEngine {
                 return reinterpret_cast<T*>(raw_ptr);
             }
 
-            void deallocate(T* p, std::size_t n) noexcept {
-                (void)p;
+            void deallocate(T* storage_ptr, std::size_t n) noexcept {
+                (void)storage_ptr;
                 (void)n;
             }
             

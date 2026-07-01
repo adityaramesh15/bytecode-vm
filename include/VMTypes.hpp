@@ -4,9 +4,10 @@
 enum class VMError : uint8_t {
     InvalidRegister,
     InvalidOperand,
-    UnknownLabel,
     UnsupportedOpcode,
-    StackUnderflow
+    StackUnderflow, 
+    UnknownLabel,
+    InvalidBytecode
 };
 
 

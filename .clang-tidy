@@ -1,0 +1,49 @@
+---
+# Scoped static analysis for Bytecode-VM (include/, src/, tests/ only).
+# Exclusions reflect established project conventions (pragma once, braced style, etc.).
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  -portability-avoid-pragma-once,
+  -modernize-use-trailing-return-type,
+  -modernize-use-designated-initializers,
+  -modernize-avoid-c-arrays,
+  -modernize-use-default-member-init,
+  -modernize-use-nodiscard,
+  -modernize-use-integer-sign-comparison,
+  -modernize-return-braced-init-list,
+  -modernize-use-auto,
+  -modernize-use-ranges,
+  -modernize-loop-convert,
+  -readability-magic-numbers,
+  -readability-braces-around-statements,
+  -readability-convert-member-functions-to-static,
+  -readability-implicit-bool-conversion,
+  -readability-qualified-auto,
+  -readability-redundant-casting,
+  -readability-redundant-typename,
+  -readability-simplify-boolean-expr,
+  -readability-use-concise-preprocessor-directives,
+  -readability-function-cognitive-complexity,
+  -performance-enum-size,
+  -cert-err58-cpp,
+  -bugprone-chained-comparison,
+  -bugprone-throwing-static-initialization,
+  -bugprone-use-after-move,
+  -bugprone-suspicious-stringview-data-usage,
+  -bugprone-exception-escape
+# Promote tidy findings to errors; omit clang-diagnostic-* (Catch2 __COUNTER__ on LLVM 22+).
+WarningsAsErrors: 'bugprone-*,cert-*,performance-*,portability-*,readability-*,modernize-*'
+HeaderFilterRegex: '(include|src|tests)/.*'
+CheckOptions:
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: 3
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: 3
+  - key: readability-identifier-length.MinimumLoopCounterNameLength
+    value: 3

@@ -20,12 +20,16 @@
       "name": "ci",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_CXX_COMPILER": "clang++",
+        "BYTECODE_VM_ENABLE_CLANG_TIDY": "ON"
       }
     },
     {
       "name": "dev",
-      "inherits": "base"
+      "inherits": "base",
+      "cacheVariables": {
+        "BYTECODE_VM_ENABLE_CLANG_TIDY": "OFF"
+      }
     }
   ],
   "buildPresets": [

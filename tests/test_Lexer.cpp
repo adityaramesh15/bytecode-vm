@@ -33,11 +33,11 @@ TEST_CASE("Lexer - Single Character Punctuation", "[Lexer]") {
     auto tokens = lexer.lex_input();
 
     REQUIRE(tokens.size() == 5); // 4 commas + 1 EndOfFile
-    for (size_t i = 0; i < 4; ++i) {
-        REQUIRE(tokens[i].token == TokenType::Comma);
-        REQUIRE(tokens[i].lexeme == ",");
-        REQUIRE(tokens[i].line == 1);
-        REQUIRE(tokens[i].column == (i + 1));
+    for (size_t tok_idx = 0; tok_idx < 4; ++tok_idx) {
+        REQUIRE(tokens[tok_idx].token == TokenType::Comma);
+        REQUIRE(tokens[tok_idx].lexeme == ",");
+        REQUIRE(tokens[tok_idx].line == 1);
+        REQUIRE(tokens[tok_idx].column == (tok_idx + 1));
     }
 }
 
@@ -69,9 +69,9 @@ TEST_CASE("Lexer - Opcodes Identification", "[Lexer]") {
     REQUIRE(tokens.size() == 9); // 8 opcodes + 1 EndOfFile
     
     std::vector<std::string_view> expected = {"MOV", "ADD", "SUB", "JMP", "PUSH", "POP", "CALL", "RET"};
-    for (size_t i = 0; i < expected.size(); ++i) {
-        REQUIRE(tokens[i].token == TokenType::Opcode);
-        REQUIRE(tokens[i].lexeme == expected[i]);
+    for (size_t op_idx = 0; op_idx < expected.size(); ++op_idx) {
+        REQUIRE(tokens[op_idx].token == TokenType::Opcode);
+        REQUIRE(tokens[op_idx].lexeme == expected[op_idx]);
     }
 }
 
