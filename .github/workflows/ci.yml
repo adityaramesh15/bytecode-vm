@@ -1,33 +1,34 @@
 name: bytecode-vm CI Pipeline
+run-name: ${{ github.event.head_commit.message || github.event.pull_request.title || github.ref_name }}
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
 
     steps:
-    - name: Checkout Repository Code
-      uses: actions/checkout@v4
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
 
-    - name: Install System Toolchain & Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake clang clang-tidy ninja-build libc++-dev libc++abi-dev
+      - name: Install System Toolchain & Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang clang-tidy ninja-build libc++-dev libc++abi-dev
 
-    - name: Configure CMake Build
-      run: cmake --preset ci
+      - name: Configure CMake Build
+        run: cmake --preset ci
 
-    - name: Compile Target Binary
-      run: cmake --build --preset ci
+      - name: Compile Target Binary
+        run: cmake --build --preset ci
 
-    - name: Execute Automated Test Engine (with ASan/UBSan)
-      env:
-        # Ubuntu packaged libc++abi can report false-positive alloc-dealloc-mismatch
-        # when C++ exceptions are caught under ASan (llvm/llvm-project#59432).
-        ASAN_OPTIONS: alloc_dealloc_mismatch=0
-      run: ./build/vm_tests
+      - name: Execute Automated Test Engine (with ASan/UBSan)
+        env:
+          # Ubuntu packaged libc++abi can report false-positive alloc-dealloc-mismatch
+          # when C++ exceptions are caught under ASan (llvm/llvm-project#59432).
+          ASAN_OPTIONS: alloc_dealloc_mismatch=0
+        run: ./build/vm_tests

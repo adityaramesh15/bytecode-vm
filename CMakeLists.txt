@@ -28,6 +28,11 @@ endif()
 # ==========================================
 # 2. Third-Party Dependencies (FetchContent)
 # ==========================================
+# Probe with the positive form: clang silently ignores unknown -Wno-* flags,
+# so testing -Wc2y-extensions is the only reliable way to detect support.
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-Wc2y-extensions BYTECODE_VM_HAS_WC2Y_EXTENSIONS)
+
 include(FetchContent)
 FetchContent_Declare(
     Catch2
@@ -57,9 +62,14 @@ target_compile_options(vm_compiler_settings INTERFACE
         -Wall -Wextra -Werror -Wpedantic
         -Wshadow -Wconversion -Wnon-virtual-dtor
     >
-    # Catch2 TEST_CASE macros use __COUNTER__ (C2y); LLVM 22+ warns under -Werror.
-    $<$<CXX_COMPILER_ID:Clang>:-Wno-c2y-extensions>
 )
+
+# Catch2 TEST_CASE macros use __COUNTER__ (C2y); LLVM 22+ warns under -Werror.
+# Only added when the compiler recognizes it, otherwise older clang-tidy (CI)
+# flags it via clang-diagnostic-unknown-warning-option.
+if(BYTECODE_VM_HAS_WC2Y_EXTENSIONS)
+    target_compile_options(vm_compiler_settings INTERFACE -Wno-c2y-extensions)
+endif()
 
 # ==========================================
 # 4. Primary Targets (Executables & Benchmarks)
