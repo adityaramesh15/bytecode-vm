@@ -69,5 +69,5 @@ Testing/
 .cache/
 
 bugs.md
-instructions.txt
+instructions.*
 *.bcmv

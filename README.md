@@ -53,19 +53,20 @@ The system is partitioned into four decoupled core subsystems:
 * [x] ~~**Day 5:** Model physical activation hardware stack routines (`PUSH`, `POP`, `CALL`, `RET`).~~
 * [x] ~~**Day 6-7:** Code the binary assembler bit-packer to emit serialized bytecode files directly into execution hooks.~~
 
-### Week 4: Multi-Threading, Concurrency & Managed Runtimes
+### Week 4: Control Flow Graphs, SSA, and Data-Flow Analysis
 
-* [ ] **Day 1-2:** Construct a reusable thread pool and concurrent task processing queue utilizing modern signaling patterns.
-* [ ] **Day 3-4:** Build a lock-free Single-Producer Single-Consumer (SPSC) ring buffer to pass atomic runtime metrics across pipeline threads.
-* [ ] **Day 5-6:** Implement Thread-Local Allocation Buffers (TLABs) inside the arena memory model to fully negate cross-core cache line thrashing.
-* [ ] **Day 7:** System consolidation under concurrent race stress testing conditions.
+* [ ] **Day 1-2:** Refactor the flat linear IR into a structural Control Flow Graph (CFG) composed of Basic Blocks and explicit edge transitions.
+* [ ] **Day 3:** Implement an iterative Dominator Tree algorithm to calculate dominance frontiers across the CFG.
+* [ ] **Day 4:** Construct a Static Single Assignment (SSA) transformation pass, placing mathematical (phi) nodes at dominance frontiers.
+* [ ] **Day 5:** Code a global Sparse Conditional Constant Propagation (SCCP) analysis pass utilizing the SSA representation.
+* [ ] **Day 6-7:** Implement a backward Data-Flow Analysis framework to perform Global Liveness Analysis and compute active variable lifetimes.
 
-### Week 5: Compiler Optimizations & Tooling Deep Dive
+### Week 5: AOT Code Generation, Register Allocation & Vectorization
 
-* [ ] **Day 1:** Re-engineer the compilation track to map out a linear Single Static Assignment (SSA) style Intermediate Representation.
-* [ ] **Day 2-3:** Author AST optimization passes executing constant-folding and dead-code elimination routines.
-* [ ] **Day 4-5:** Profile execution loops using hardware performance counters (`perf`/WPR) and inject compiler intrinsics alongside `[[likely]]`/`[[unlikely]]` optimization attributes.
-* [ ] **Day 6-7:** Establish complete end-to-end regression pipelines compiling and executing mathematics suites within the virtual environment.
+* [ ] **Day 1-2:** Construct a target instruction selector converting abstract IR operations into mock machine assembly instructions using a Maximal Munch or tree-matching technique.
+* [ ] **Day 3-4:** Build a global Register Allocator using a Linear Scan or Graph Coloring algorithm to map infinite SSA variables to a fixed set of physical target registers.
+* [ ] **Day 5:** Author an auto-vectorization pass that aggregates contiguous scalar operations into wide SIMD array vectors (modeling SLP concepts).
+* [ ] **Day 6-7:** Profile compilation throughput alongside codegen execution traces using Windows Performance Recorder (WPR); optimize hot backend passes for cache-line locality.
 
 ---
 
