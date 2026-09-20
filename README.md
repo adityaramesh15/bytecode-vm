@@ -1,92 +1,222 @@
-# Bytecode-VM (WIP)
+# Bytecode-VM
 
-A high-performance, register-based Virtual Machine, isolated runtime environment, and optimizing compiler built entirely from first principles using modern C++20/23.
+A high-performance, register-based Virtual Machine, isolated runtime environment, and compiler toolchain built from first principles using modern **C++20/C++23**.
 
-This project is engineered to eliminate standard runtime layout inefficiencies by enforcing strict cache locality, eliminating standard OS heap fragmentation, and implementing custom low-level software-defined hardware abstractions. Using this as a learning tool to understand compiler construction and modern C++. 
+> **Project Status: Concluded (Weeks 1–3 Complete & Verified)**  
+> This project was developed as an intensive systems-programming exploration following a 5-week compiler and runtime track. Development has concluded after achieving a fully functional, end-to-end working system covering Weeks 1 through 3: from zero-copy assembly parsing and custom arena memory management to an emulated 2-level page table MMU, binary bytecode assembler, and a register-based virtual CPU. Advanced AOT optimization passes (SSA/CFG from Weeks 4–5) remain intentionally unbuilt.
+
+---
+
+## Highlights & Verified Capabilities
+
+- **End-to-End Execution Pipeline:** Assembly source &rarr; zero-copy tokenization &rarr; monadic AST parsing &rarr; 2-pass binary bytecode assembly &rarr; `.bcmv` file serialization &rarr; guest MMU virtual memory paging &rarr; register VM execution.
+- **Zero Raw Pointers & Zero Heap Fragmenting:** Custom move-only RAII smart pointers, 64 MB contiguous `LinearArena`, and a standard-compliant `ArenaAllocator` eliminate standard heap allocations in hot runtime paths.
+- **Hardware-Conscious Architecture:** 64-byte cache-line aligned register files (`alignas(64)`), contiguous memory layouts, and static structure layout padding optimization.
+- **Simulated Operating System Virtual Memory:** Software 2-level Page Table (PDI/PTI) with 4 KB page frames, a 16-entry software Translation Lookaside Buffer (TLB), page permission enforcement (Read/Write/Execute), and frame recycling.
+- **Comprehensive Test Suite:** 14 test suites, 80 test cases, and 480 assertions passing under AddressSanitizer (ASan) and UndefinedBehaviorSanitizer (UBSan).
 
 ---
 
 ## Architectural Blueprint
 
-The system is partitioned into four decoupled core subsystems:
-
-* **The Frontend & Compiler:** A zero-copy lexical analyzer and AST parser that ingests a custom assembly language, lowers it into an Intermediate Representation (IR), applies optimization passes, and serializes a packed binary instruction stream.
-* **The Custom Memory Subsystem:** A 64 MB hardware-aligned monotonic `LinearArena` and compliant C++ `ArenaAllocator` stack that bypasses `malloc`/`new` execution paths to completely eradicate external heap fragmentation and prioritize L1/L2 cache line retention
-* **The Core Execution Engine:** An emulated, register-based virtual CPU processing explicit 32-bit bitmasked instruction operations across a localized contiguous register file inside an optimized fetch-decode-execute interpreter loop.
-* **The Runtime Parallel Subsystem:** A lock-free telemetry logging stream and multi-threaded work-stealing engine designed to emulate managed concurrent execution runtimes.
-
----
-
-## Technical Guardrails Enforced
-
-* **Zero Raw Pointer Ownership:** Every dynamic allocation lifecycle is explicitly bound to `UniquePtr` RAII handles or directly handled through custom monotonic arena allocations.
-* **Zero-Copy String Pipelines:** No underlying heap copying or string allocations occur inside token parsing tracks; substrings are sliced entirely as lightweight `std::string_view` abstractions
-* **Compile-Time Interface Safety:** All internal type pipelines are validated at compile-time using explicit C++20 constraints and type traits via custom concepts.
-* **Strict Diagnostics Validation:** Built under severe `-Wall -Wextra -Werror` constraints and actively audited via ASan and UBSan.
-
----
-
-## Development Progress Track
-
-### ~~Week 1: Modern C++ Foundations & Language Frontend~~
-
-* [x] ~~**Day 1-2:** Implement custom move-only `UniquePtr` variations and custom `StringView` primitives.~~
-* [x] ~~**Day 3:** Build a zero-copy lexical analyzer mapping source code assembly slices.~~
-* [x] ~~**Day 4:** Construct C++20 pipeline validation concepts (`IsRegister`, `IsInstruction`).~~
-* [x] ~~**Day 5:** Architect the AST Parser using monadic `std::expected` and `std::variant` type sets.~~
-* [x] ~~**Day 6-7:** Establish strict CMake sanitizer pipelines and execute comprehensive malformed parsing tests.~~
-
-### ~~Week 2: Memory & Cache Hierarchy Architecture~~
-
-* [x] ~~**Day 1:** Write static structure layout optimization analyzers to eliminate layout padding bytes.~~
-* [x] ~~**Day 2:** Code benchmarks profiling cache-miss variances between row-major and column-major lookups.~~
-* [x] ~~**Day 3:** Benchmark concurrent false sharing degradation and enforce alignment mitigations via `alignas` constructs.~~
-* [x] ~~**Day 4-5:** Author a monotonic `LinearArena` and write a fully custom standard-compliant `ArenaAllocator` adapter.~~
-* [x] ~~**Day 6-7:** Refactor AST node trees into flattened index-based arena layouts and profile performance throughput gains.~~
-
-### Week 3: Operating Systems & Runtime Fundamentals
-
-* [x] ~~**Day 1:** Emulate a 2-Level Page Table mapping module coupled with an internal Software TLB cache.~~
-* [x] ~~**Day 2:** Implement low-level OS page wrappers (`mmap`/`VirtualAlloc`) managing explicit Read/Write/Execute (`RWX`) segment boundaries.~~
-* [x] ~~**Day 3:** Build out the structural switch-dispatch loop covering fundamental instruction sets (`ADD`, `SUB`, `MOV`, `JMP`).~~
-* [x] ~~**Day 4:** Structure a contiguous 16-register layout optimized entirely for internal L1 data cache capacity bounds.~~
-* [x] ~~**Day 5:** Model physical activation hardware stack routines (`PUSH`, `POP`, `CALL`, `RET`).~~
-* [x] ~~**Day 6-7:** Code the binary assembler bit-packer to emit serialized bytecode files directly into execution hooks.~~
-
-### Week 4: Control Flow Graphs, SSA, and Data-Flow Analysis
-
-* [ ] **Day 1-2:** Refactor the flat linear IR into a structural Control Flow Graph (CFG) composed of Basic Blocks and explicit edge transitions.
-* [ ] **Day 3:** Implement an iterative Dominator Tree algorithm to calculate dominance frontiers across the CFG.
-* [ ] **Day 4:** Construct a Static Single Assignment (SSA) transformation pass, placing mathematical (phi) nodes at dominance frontiers.
-* [ ] **Day 5:** Code a global Sparse Conditional Constant Propagation (SCCP) analysis pass utilizing the SSA representation.
-* [ ] **Day 6-7:** Implement a backward Data-Flow Analysis framework to perform Global Liveness Analysis and compute active variable lifetimes.
-
-### Week 5: AOT Code Generation, Register Allocation & Vectorization
-
-* [ ] **Day 1-2:** Construct a target instruction selector converting abstract IR operations into mock machine assembly instructions using a Maximal Munch or tree-matching technique.
-* [ ] **Day 3-4:** Build a global Register Allocator using a Linear Scan or Graph Coloring algorithm to map infinite SSA variables to a fixed set of physical target registers.
-* [ ] **Day 5:** Author an auto-vectorization pass that aggregates contiguous scalar operations into wide SIMD array vectors (modeling SLP concepts).
-* [ ] **Day 6-7:** Profile compilation throughput alongside codegen execution traces using Windows Performance Recorder (WPR); optimize hot backend passes for cache-line locality.
-
----
-
-## Build and Testing Environment
-
-### Prerequisites
-
-* Clang 16+ or GCC 13+ (Fully supporting C++23 features)
-* CMake 3.24+
-* Ninja Build System (Recommended)
-
-### Compilation Sequence
-
-```bash
-# Configure and build with the same preset used by CI (ASan, UBSan, clang-tidy)
-cmake --preset ci
-cmake --build --preset ci
-
-# Run the test evaluation matrix
-./build/vm_tests
+```
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │                            ASSEMBLY SOURCE                              │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+                   ┌──────────────────────────────────────┐
+                   │       Zero-Copy Lexer & AST          │
+                   │    (std::string_view, Concepts,      │
+                   │      std::variant, std::expected)     │
+                   └──────────────────┬───────────────────┘
+                                      │
+                                      ▼
+                   ┌──────────────────────────────────────┐
+                   │        Two-Pass Bytecode Emitter     │
+                   │   (32-bit packed binary instructions,│
+                   │    label resolution, .bcmv container)│
+                   └──────────────────┬───────────────────┘
+                                      │
+                                      ▼
+                   ┌──────────────────────────────────────┐
+                   │    Virtual Memory Subsystem (MMU)    │
+                   │   (2-Level Page Table, 16-slot TLB,  │
+                   │    4KB Frames, RWX Page Protections) │
+                   └──────────────────┬───────────────────┘
+                                      │
+                                      ▼
+                   ┌──────────────────────────────────────┐
+                   │         Virtual Machine (CPU)        │
+                   │  (16 Contiguous GPRs, Call Stack,    │
+                   │   Branch Validator, Switch Dispatch) │
+                   └──────────────────────────────────────┘
 ```
 
-CI and Clang builds use libc++ for C++23 support (`std::expected`, etc.). On Linux, if ASan reports `alloc-dealloc-mismatch` during exception tests, set `ASAN_OPTIONS=alloc_dealloc_mismatch=0` (CI does this automatically). For exact Ubuntu reproduction on macOS, use an Ubuntu 24.04 container.
+The system is partitioned into four core subsystems:
+
+### 1. Compiler Frontend & Parser
+- **Zero-Copy Lexical Analyzer (`Lexer`):** Scans assembly text without heap allocation using lightweight `std::string_view` slices into the source buffer.
+- **Type-Constrained Pipeline (`CompilerConcepts.hpp`):** Enforces C++20 concepts (`IsRegister`, `IsInstruction`, `IsOperand`, `IsArenaAllocator`) at compile time.
+- **Monadic Error Handling (`Parser`):** Employs C++23 monadic `std::expected` and `std::variant` instruction nodes, providing clear line/column error diagnostics without C++ exceptions.
+- **Move-Only Smart Pointers (`UniquePtr.hpp`):** Handcrafted move-only pointer abstraction supporting custom deleters and verified leak-free ownership transfers.
+
+### 2. Custom Memory & Cache Subsystem
+- **Monotonic Memory Arena (`LinearArena`):** Pre-allocates a 64 MB contiguous memory region via `std::byte`. Provides $O(1)$ bump-pointer allocation with hardware alignment enforcement (`alignas`), memory pinning, and bulk reset.
+- **Standard-Compliant Allocator Adapter (`ArenaAllocator<T>`):** Wraps `LinearArena` with `std::allocator_traits` compatibility, allowing standard containers (`std::vector<Token, ArenaAllocator<Token>>`) to allocate directly inside the arena with zero `malloc`/`new` calls.
+- **Static Struct Optimizer (`StructOptimizer.hpp`):** Static analyzer tools to measure struct padding, evaluate alignment boundaries, and optimize field order for cache efficiency.
+
+### 3. Operating System Virtual Memory Emulation
+- **Hardware-Aligned Page Frames:** Physical frames and page tables reside in contiguous memory aligned to 4096 bytes.
+- **Two-Level Paging Architecture (`MemoryManagementUnit`):** 32-bit virtual addresses mapped via a 10-bit Page Directory Index (PDI), a 10-bit Page Table Index (PTI), and a 12-bit intra-page offset.
+- **Software TLB Cache:** 16-entry fully associative Translation Lookaside Buffer with invalidation on unmap and permission update.
+- **Page Table Entries (PTE):** Packed 32-bit entries encoding Physical Frame Number (PFN) in upper 20 bits and Present, Readable, Writable bits in the lower flags.
+- **Native OS Page Wrappers (`VirtualMemoryBuffer.hpp`):** RAII abstraction around platform virtual memory APIs (`mmap`/`munmap` with `PROT_READ`, `PROT_WRITE`, `PROT_EXEC` on POSIX; `VirtualAlloc`/`VirtualFree` on Windows).
+
+### 4. Execution Engine & Bytecode Format
+- **32-Bit Instruction Bitmasking:** Compact little-endian bytecode layout. Instructions use a 32-bit header containing opcode (4 bits), operand kinds (4 bits each), register indices (4 bits each), and 12 reserved bits, followed by optional 32-bit extension words for sign-extended immediates or absolute branch offsets.
+- **Binary Assembler (`BytecodeEmitter`):** Two-pass assembler calculating instruction byte lengths, recording label targets, and resolving jumps/calls.
+- **Binary File Container (`BytecodeFile`):** File format validation with magic bytes `0x42434D56` (`"BCMV"`) and file version tracking.
+- **Register File:** Contiguous 16 General-Purpose Registers (`R0` through `R15`) with 64-byte hardware cache alignment (`alignas(64)`), plus dedicated instruction pointer (`ip`) and stack pointer (`sp`).
+- **Activation Hardware Stack:** Hardware stack routines supporting function call frames via `PUSH`, `POP`, `CALL`, and `RET`.
+- **Pre-Execution Target Validation:** Validates ahead-of-time that all branch and call targets land on valid instruction boundaries within the code segment before execution begins.
+
+---
+
+## Instruction Set Architecture (ISA)
+
+The current engine implements 8 fundamental operations:
+
+| Opcode | Mnemonic | Operands | Description |
+| :--- | :--- | :--- | :--- |
+| `0x0` | `MOV` | `Rd, Rs` or `Rd, Imm` | Copy register value or load immediate into destination register |
+| `0x1` | `ADD` | `Rd, Rs` or `Rd, Imm` | Add register or immediate into destination register |
+| `0x2` | `SUB` | `Rd, Rs` or `Rd, Imm` | Subtract register or immediate from destination register |
+| `0x3` | `JMP` | `<label>` | Unconditional absolute branch to code segment offset |
+| `0x4` | `PUSH`| `Rs` or `Imm` | Push register value or immediate onto the activation stack |
+| `0x5` | `POP` | `Rd` | Pop value from activation stack into destination register |
+| `0x6` | `CALL`| `<label>` | Push return address (`ip + next`) onto stack and jump to label |
+| `0x7` | `RET` | *(none)* | Pop return address from stack and restore `ip` |
+
+*(Note: Additional conditional branch opcodes `BEQ`, `BNE`, `BLT` exist in the AST/instruction definitions for future expansion, but backend execution loop support was not wired prior to project conclusion).*
+
+---
+
+## End-to-End Demonstration Program
+
+The following assembly program is built into `src/main.cpp`:
+
+```assembly
+MOV R1, 42
+ADD R2, R1
+PUSH R2
+CALL add_one
+POP R3
+JMP done
+
+add_one:
+ADD R2, R1
+RET
+
+done:
+MOV R0, 0
+```
+
+When compiled and run:
+1. Emits a 52-byte `.bcmv` binary container file.
+2. Loads code into simulated guest virtual memory at base address `0x00400000`.
+3. Executes through the virtual register file:
+   - `R1 = 42`
+   - `R2 = 84` (`42 + 42` across the function call)
+   - `R3 = 42` (restored from stack)
+   - `Final IP = 52`
+
+---
+
+## Cache & Hardware Benchmarks
+
+The repository includes dedicated hardware profiling benchmarks in `benchmarks/`:
+
+1. **Spatial Locality (`matrix_benchmark.cpp`):** Measures cache-miss variances between row-major (cache line friendly) versus column-major traversals across large 2D matrices.
+2. **False Sharing & MESI Invalidation (`false_sharing_benchmark.cpp`):** Demonstrates multi-threaded throughput degradation when adjacent worker threads write to the same 64-byte cache line, and demonstrates mitigation via `alignas(std::hardware_destructive_interference_size)`.
+3. **Data-Oriented AST Traversal (`ast_traversal_benchmark.cpp`):** Compares pointer-chasing linked tree traversals against flat, contiguous arena-backed array layouts.
+
+---
+
+## Curriculum Roadmap & Status
+
+| Phase | Milestone | Status | Notes |
+| :--- | :--- | :---: | :--- |
+| **Week 1** | **Modern C++ Foundations & Language Frontend** | **Completed** | `UniquePtr`, `StringView`, zero-copy `Lexer`, Concepts, monadic `Parser`. |
+| **Week 2** | **Memory & Cache Hierarchy Architecture** | **Completed** | `LinearArena`, `ArenaAllocator`, `StructOptimizer`, DoD & false sharing benchmarks. |
+| **Week 3** | **Operating Systems & Runtime Fundamentals** | **Completed** | 2-level Page Table MMU, TLB, `VirtualMemoryBuffer`, 16 GPR CPU, `.bcmv` assembler, runtime interpreter. |
+| **Week 4** | **Control Flow Graphs, SSA, and Data-Flow Analysis** | *Concluded* | Left unbuilt; basic block partitioning and dominance frontiers not implemented. |
+| **Week 5** | **AOT Code Generation, Register Allocation & Vectorization** | *Concluded* | Left unbuilt; graph coloring and SIMD SLP passes not implemented. |
+
+---
+
+## Building and Running
+
+### Prerequisites
+- **Compiler:** Clang 16+, GCC 13+, or AppleClang with full C++23 support (`std::expected`, `std::string_view` features)
+- **Build System:** CMake 3.24+ and Ninja or Make
+- **Libraries:** Catch2 v3 (automatically retrieved via `FetchContent`)
+
+### Compilation
+
+```bash
+# Configure the build
+cmake -B build -S .
+
+# Compile the test suite and VM executable
+cmake --build build
+
+# Run the full test suite (80 test cases, 480 assertions)
+./build/vm_tests
+
+# Run the end-to-end VM demonstration
+./build/bytecode_vm
+```
+
+### Running Benchmarks
+
+```bash
+# Build benchmark targets
+cmake --build build --target matrix_benchmark false_sharing_benchmark ast_traversal_benchmark
+
+# Execute benchmarks
+./build/matrix_benchmark
+./build/false_sharing_benchmark
+./build/ast_traversal_benchmark
+```
+
+---
+
+## Repository Structure
+
+```
+├── include/
+│   ├── AST.hpp                  # AST instruction and operand structures
+│   ├── ArenaAllocator.hpp       # C++ standard-compliant arena allocator adapter
+│   ├── BytecodeEmitter.hpp      # Two-pass binary bytecode assembler
+│   ├── BytecodeFile.hpp         # .bcmv file container reader and writer
+│   ├── BytecodeFormat.hpp       # 32-bit packed instruction format & bitmasks
+│   ├── CompilerConcepts.hpp     # C++20 type validation concepts
+│   ├── Instruction.hpp          # Instruction opcodes and operand definitions
+│   ├── Lexer.hpp                # Zero-copy assembly lexical analyzer
+│   ├── LinearArena.hpp          # 64MB monotonic memory arena
+│   ├── Parser.hpp               # Monadic recursive-descent parser (std::expected)
+│   ├── StringView.hpp           # Non-owning string slice abstraction
+│   ├── StructOptimizer.hpp      # Struct alignment and padding analyzer
+│   ├── UniquePtr.hpp            # Handcrafted move-only RAII smart pointer
+│   ├── VirtualMachine.hpp       # 16-register virtual CPU and execution loop
+│   ├── VirtualMemory.hpp        # 2-level Page Table MMU and Software TLB
+│   ├── VirtualMemoryBuffer.hpp  # OS virtual page allocation wrapper (mmap / VirtualAlloc)
+│   └── VMTypes.hpp              # Common VM error codes and result types
+├── src/
+│   └── main.cpp                 # End-to-end demonstration program
+├── tests/                       # 14 Catch2 test suites covering all subsystems
+├── benchmarks/                  # Cache locality, false sharing, and DoD benchmarks
+├── CMakeLists.txt               # CMake configuration with ASan/UBSan instrumentation
+└── CMakePresets.json            # Presets for CI and local development
+```

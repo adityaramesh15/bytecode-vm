@@ -11,7 +11,10 @@ enum class Opcode : uint8_t {
     PUSH,
     POP,
     CALL,
-    RET
+    RET,
+    BEQ,
+    BNE,
+    BLT
 };
 
 struct VirtualRegister {
